@@ -1,3 +1,5 @@
+import { Button } from './Button';
+
 type PaginationProps = {
   page: number;
   limit: number;
@@ -15,25 +17,23 @@ export function Pagination({ page, limit, total, onChange }: PaginationProps) {
         Showing {from}–{to} of {total}
       </span>
       <div className="pagination__controls">
-        <button
-          type="button"
-          className="btn btn--secondary btn--sm"
+        <Button
+          size="sm"
           disabled={page <= 1}
           onClick={() => onChange(page - 1)}
         >
           Prev
-        </button>
+        </Button>
         <span className="small">
           Page {page} of {last}
         </span>
-        <button
-          type="button"
-          className="btn btn--secondary btn--sm"
+        <Button
+          size="sm"
           disabled={page >= last}
           onClick={() => onChange(page + 1)}
         >
           Next
-        </button>
+        </Button>
       </div>
     </div>
   );
