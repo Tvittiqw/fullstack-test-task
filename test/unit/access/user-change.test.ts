@@ -6,16 +6,17 @@ const ivan = user({ id: 'u-ivan', role: 'IT' });
 const petro = user({ id: 'u-petro', role: 'IT' });
 const anna = user({ id: 'u-anna', role: 'manager' });
 const olena = user({ id: 'u-olena', role: 'user', managerId: 'u-anna' });
-const everyone = [ivan, petro, anna, olena];
+const dmytro = user({ id: 'u-dmytro', role: 'user', managerId: 'u-maksym' });
+const everyone = [ivan, petro, anna, olena, dmytro];
 
 describe('authorizeUserChange', () => {
   it('refuses to remove the last active IT, before the self-change rule', () => {
     const users = [ivan, anna, olena];
     expect(
       authorizeUserChange(ivan, ivan, { status: 'deactivated' }, users),
-    ).toEqual({ ok: false, denial: DENIALS.lastActiveIt });
+    ).toEqual({ ok: false, denial: DENIALS.lastActiveInRole });
     expect(authorizeUserChange(ivan, ivan, { role: 'manager' }, users)).toEqual(
-      { ok: false, denial: DENIALS.lastActiveIt },
+      { ok: false, denial: DENIALS.lastActiveInRole },
     );
   });
 
@@ -32,6 +33,21 @@ describe('authorizeUserChange', () => {
     expect(
       authorizeUserChange(ivan, petro, { status: 'deactivated' }, everyone),
     ).toEqual({ ok: true });
+  });
+
+  it('refuses a target outside the actor scope before any other rule', () => {
+    expect(
+      authorizeUserChange(anna, dmytro, { status: 'deactivated' }, everyone),
+    ).toEqual({ ok: false, denial: DENIALS.outOfScope });
+    expect(
+      authorizeUserChange(anna, olena, { status: 'deactivated' }, everyone),
+    ).toEqual({ ok: true });
+  });
+
+  it('treats a self role change to the same role as a no-op', () => {
+    expect(authorizeUserChange(ivan, ivan, { role: 'IT' }, everyone)).toEqual({
+      ok: true,
+    });
   });
 
   it('allows changing other users', () => {

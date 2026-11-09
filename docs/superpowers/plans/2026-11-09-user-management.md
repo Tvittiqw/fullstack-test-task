@@ -17,7 +17,7 @@
 - Role string literals appear only in `src/shared/roles.ts`, `src/server/store/seed/users.seed.ts` and tests.
 - Import boundaries (spec §5): `src/shared` imports nothing; `src/server` imports `src/server` + `src/shared`; route handlers import `src/server` only; `'use client'` components import `src/ui` + `src/shared` only; `src/ui` never imports `src/server`.
 - Error envelope: `{ error: { code, message, details? } }`. Success bodies are the resource directly.
-- Denial mapping: `forbidden` → 403, `conflict` → 409. In `authorizeUserChange`, `last_active_it` is evaluated before `self_change`.
+- Denial mapping: `forbidden` → 403, `conflict` → 409. In `authorizeUserChange`, `last_active_in_role` is evaluated before `self_change`.
 - Cookie name `session`; `HttpOnly; Path=/; SameSite=Lax`, `Secure` when `NODE_ENV === 'production'`.
 - Pagination: `page ≥ 1` default 1, `limit` 1–100 default 25, 1,200 generated clients, fixed PRNG seed.
 - Commit after every task with the message given; no `Co-Authored-By` trailers. `npm test`, `npm run lint`, `npm run typecheck` green before every commit.
@@ -26,7 +26,7 @@
 ## Review Focus
 
 1. Malformed JSON or non-object body on any POST/PATCH must answer 400 `invalid_json` / `validation`, never 500. Test in Task 5 (`handle.ts`).
-2. `PATCH /api/users/:id` with an unknown id must answer 404 before any scope check, so a manager cannot probe which ids exist via 403 vs 404 differences in the wrong order. Test in Task 6.
+2. `PATCH /api/users/:id` with an unknown id answers 404 before the scope check. This is a deliberate choice for clear errors: a manager with the permission can tell a missing id (404) from an out-of-scope one (403). Test in Task 6.
 3. Email uniqueness is case-insensitive on create and on profile edit, and editing a user to their own current email is not a conflict. Test in Task 6.
 4. A manager demoted to `user` keeps their reports' `managerId`, but can no longer edit them because `userScope` becomes `null`. Test in Task 4.
 5. `GET /api/clients?page=999` beyond the last page returns 200 with `items: []` and the real `total`; `page=0`, `page=abc`, `limit=101` return 400 `validation`. Test in Task 7.
@@ -260,7 +260,7 @@ export function visibleUsers(actor: PublicUser, all: PublicUser[]): PublicUser[]
 export type Denial = { kind: 'forbidden' | 'conflict'; code: string; message: string };
 export type Decision = { ok: true } | { ok: false; denial: Denial };
 export type UserChange = { role: Role } | { status: UserStatus };
-export const DENIALS: { lastActiveIt: Denial; selfChange: Denial };
+export const DENIALS: { outOfScope: Denial; lastActiveInRole: Denial; selfChange: Denial };
 export function authorizeUserChange(actor: PublicUser, target: PublicUser, change: UserChange, users: Iterable<PublicUser>): Decision;
 // test/helpers/users.ts
 export function user(overrides: Partial<PublicUser> & { role: Role }): PublicUser;   // fills id, email, status 'active', managerId null
@@ -288,8 +288,8 @@ describe('visibleUsers', () => {
   it('IT sees all'); it('manager sees only direct reports'); it('user sees none');
 });
 describe('authorizeUserChange', () => {
-  it('last active IT deactivating self → conflict last_active_it');          // users = [ivan, anna]
-  it('last active IT demoting self to manager → conflict last_active_it');
+  it('last active IT deactivating self → conflict last_active_in_role');          // users = [ivan, anna]
+  it('last active IT demoting self to manager → conflict last_active_in_role');
   it('IT deactivating self with another active IT → forbidden self_change'); // users = [ivan, petro]
   it('IT demoting self with another active IT → forbidden self_change');
   it('IT deactivating the other IT → ok');                                    // users = [ivan, petro]
@@ -297,12 +297,12 @@ describe('authorizeUserChange', () => {
   it('IT changing own role to IT (no-op) → ok');
   it('IT deactivating a manager → ok');
   it('IT changing a manager to user → ok');
-  it('order: last_active_it wins over self_change when both apply');          // ivan alone, deactivate self → code last_active_it
+  it('order: last_active_in_role wins over self_change when both apply');          // ivan alone, deactivate self → code last_active_in_role
 });
 ```
 
 - [ ] **Step 6: Run** → FAIL.
-- [ ] **Step 7: Implement `authorize.ts` (lookups) and `user-change.ts` (invariants)**. Rule 4 without a role literal: the invariant is "never remove the last active holder of a role that can change status". Implement `removesLastActiveAdmin(target, change, users): boolean` = target is active, `can(target, 'users.changeStatus')`, the change is `status: 'deactivated'` or a `role` different from `target.role`, and no *other* active user has `target.role`. For today's roles this is exactly "last active IT"; a fourth admin-like role is protected automatically. `authorizeUserChange` evaluates this first (→ `conflict`, `last_active_it`), then `target.id === actor.id` with a deactivating or role-changing change (→ `forbidden`, `self_change`), else `{ ok: true }`.
+- [ ] **Step 7: Implement `authorize.ts` (lookups) and `user-change.ts` (invariants)**. Rule 4 without a role literal: the invariant is "never remove the last active holder of a role with `keepOneActive`" (policy column, decided 2026-11-09). Implement `removesLastActiveOfProtectedRole(target, change, users): boolean` = target is active, `policyFor(target.role).keepOneActive`, the change is `status: 'deactivated'` or a `role` different from `target.role`, and no *other* active user has `target.role`. For today's roles this is exactly "last active IT"; a fourth admin-like role is protected automatically. `authorizeUserChange` evaluates this first (→ `conflict`, `last_active_in_role`), then `target.id === actor.id` with a deactivating or role-changing change (→ `forbidden`, `self_change`), else `{ ok: true }`.
 - [ ] **Step 8: Run** → PASS. Then `npm test && npm run lint && npm run typecheck`.
 - [ ] **Step 9: Commit**
 
@@ -470,7 +470,7 @@ describe('updateProfile', () => {
 });
 describe('changeStatus / changeRole', () => {
   it('deactivating a user succeeds and the result has status deactivated');
-  it('propagates last_active_it as 409');                               // deactivate petro, then ivan deactivates ivan
+  it('propagates last_active_in_role as 409');                               // deactivate petro, then ivan deactivates ivan
   it('propagates self_change as 403');
 });
 ```
@@ -490,7 +490,7 @@ it('POST /api/users as Anna → 403; as Ivan with valid body → 201; with bad e
 it('PATCH /api/users/u-dmytro as Anna → 403 out_of_scope');
 it('PATCH /api/users/u-olena as Anna → 200 with new fullName');
 it('PATCH /api/users/u-anna/role as Anna → 403 forbidden');              // rule 1, not self_change: permission check comes first
-it('PATCH /api/users/u-ivan/status as Ivan → 403 self_change; after deactivating u-petro → 409 last_active_it');
+it('PATCH /api/users/u-ivan/status as Ivan → 403 self_change; after deactivating u-petro → 409 last_active_in_role');
 it('PATCH /api/users/u-olena/status {status:"deactivated"} as Ivan → 200, then Olena\'s /api/auth/me → 401');
 ```
 
@@ -690,7 +690,7 @@ it('1. Anna sees only her four reports; cannot edit Dmytro via API')            
 it('2. Anna cannot give herself IT')                                             // PATCH u-anna/role → 403 forbidden
 it('3. Anna pages clients and opens one; each page is ≤ 25 items')               // page 1, page 2 differ; GET client by first id → 200
 it('4. Ivan lands on /manage-users and is refused on content')                   // login landingRoute '/manage-users'; GET clients → 403
-it('5. Ivan: self deactivate 403 self_change; deactivate Petro 200; self again 409 last_active_it')
+it('5. Ivan: self deactivate 403 self_change; deactivate Petro 200; self again 409 last_active_in_role')
 it('6. Olena browsing, Ivan deactivates her, her next request is 401')           // GET clients 200; PATCH status by Ivan; GET clients with Olena cookie → 401
 ```
 

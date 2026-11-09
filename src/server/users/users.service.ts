@@ -1,15 +1,15 @@
 import type { PublicUser, UserStatus } from '@/shared/api-types';
 import type { Role } from '@/shared/roles';
-import { canOnUser, visibleUsers } from '@/server/access/authorize';
-import { canManageReports } from '@/server/access/policy';
+import { visibleUsers } from '@/server/access/authorize';
+import { canManageReports, policyFor } from '@/server/access/policy';
 import {
+  authorizeTargetEdit,
   authorizeUserChange,
   type UserChange,
 } from '@/server/access/user-change';
 import {
   badRequest,
   conflict,
-  forbidden,
   fromDenial,
   notFound,
 } from '@/server/http/errors';
@@ -40,11 +40,14 @@ function assertEmailFree(email: string, ownerId?: string): void {
 }
 
 export function createUser(input: CreateUserInput): PublicUser {
-  assertEmailFree(input.email);
   const managerId = input.managerId ?? null;
+  if (managerId && policyFor(input.role).userScope !== null) {
+    throw badRequest('invalid_manager', 'Only plain users can have a manager');
+  }
   if (managerId && !managerCandidates().some((m) => m.id === managerId)) {
     throw badRequest('invalid_manager', 'managerId must be an active manager');
   }
+  assertEmailFree(input.email);
   return insertUser({
     id: crypto.randomUUID(),
     fullName: input.fullName,
@@ -69,9 +72,8 @@ export function updateProfile(
   input: UpdateProfileInput,
 ): PublicUser {
   const target = loadTarget(id);
-  if (!canOnUser(actor, 'users.editProfile', target)) {
-    throw forbidden('out_of_scope', 'You can only edit your direct reports');
-  }
+  const decision = authorizeTargetEdit(actor, target);
+  if (!decision.ok) throw fromDenial(decision.denial);
   if (input.email) assertEmailFree(input.email, id);
   return updateUser(id, input);
 }

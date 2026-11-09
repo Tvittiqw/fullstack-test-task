@@ -1,5 +1,5 @@
-import type { ZodType } from 'zod';
-import { badRequest } from './errors';
+import { z, type ZodType } from 'zod';
+import { badRequest, unsupportedMediaType } from './errors';
 
 function parse<T>(input: unknown, schema: ZodType<T>, where: string): T {
   const result = schema.safeParse(input);
@@ -7,7 +7,7 @@ function parse<T>(input: unknown, schema: ZodType<T>, where: string): T {
     throw badRequest(
       'validation',
       `Invalid request ${where}`,
-      result.error.flatten(),
+      z.flattenError(result.error),
     );
   }
   return result.data;
@@ -17,6 +17,10 @@ export async function parseBody<T>(
   request: Request,
   schema: ZodType<T>,
 ): Promise<T> {
+  const contentType = request.headers.get('content-type') ?? '';
+  if (!contentType.startsWith('application/json')) {
+    throw unsupportedMediaType();
+  }
   let raw: unknown;
   try {
     raw = await request.json();

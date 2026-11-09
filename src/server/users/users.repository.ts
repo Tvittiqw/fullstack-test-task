@@ -15,12 +15,17 @@ export function findUser(id: string): PublicUser | undefined {
   return user && toPublic(user);
 }
 
-export function findUserByEmail(email: string): PublicUser | undefined {
+export function findCredentials(email: string): User | undefined {
   const wanted = email.toLowerCase();
   for (const user of getStore().users.values()) {
-    if (user.email === wanted) return toPublic(user);
+    if (user.email === wanted) return user;
   }
   return undefined;
+}
+
+export function findUserByEmail(email: string): PublicUser | undefined {
+  const user = findCredentials(email);
+  return user && toPublic(user);
 }
 
 export function insertUser(user: User): PublicUser {

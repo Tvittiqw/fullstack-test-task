@@ -59,6 +59,31 @@ describe('createUser', () => {
   });
 });
 
+describe('createUser manager rules', () => {
+  it('rejects a manager for a role that is not a plain user', () => {
+    expect(() =>
+      createUser({ ...newUser, role: 'manager', managerId: 'u-anna' }),
+    ).toThrow(
+      expect.objectContaining({ status: 400, code: 'invalid_manager' }),
+    );
+    expect(() =>
+      createUser({ ...newUser, role: 'IT', managerId: 'u-anna' }),
+    ).toThrow(
+      expect.objectContaining({ status: 400, code: 'invalid_manager' }),
+    );
+  });
+});
+
+describe('createUser order of checks', () => {
+  it('reports an invalid manager (400) before a taken email (409)', () => {
+    expect(() =>
+      createUser({ ...newUser, email: 'anna@example.com', managerId: 'nope' }),
+    ).toThrow(
+      expect.objectContaining({ status: 400, code: 'invalid_manager' }),
+    );
+  });
+});
+
 describe('managerCandidates', () => {
   it('returns the active users whose role manages reports', () => {
     expect(
@@ -110,14 +135,14 @@ describe('changeStatus and changeRole', () => {
     );
   });
 
-  it('propagates self_change as 403 and last_active_it as 409', () => {
+  it('propagates self_change as 403 and last_active_in_role as 409', () => {
     const ivan = actor('u-ivan');
     expect(() => changeStatus(ivan, 'u-ivan', 'deactivated')).toThrow(
       expect.objectContaining({ status: 403, code: 'self_change' }),
     );
     changeStatus(ivan, 'u-petro', 'deactivated');
     expect(() => changeStatus(ivan, 'u-ivan', 'deactivated')).toThrow(
-      expect.objectContaining({ status: 409, code: 'last_active_it' }),
+      expect.objectContaining({ status: 409, code: 'last_active_in_role' }),
     );
   });
 });

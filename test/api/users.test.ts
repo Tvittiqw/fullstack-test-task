@@ -5,7 +5,8 @@ import { GET as managers } from '@/app/api/users/managers/route';
 import { PATCH as editProfile } from '@/app/api/users/[id]/route';
 import { PATCH as changeRole } from '@/app/api/users/[id]/role/route';
 import { PATCH as changeStatus } from '@/app/api/users/[id]/status/route';
-import { resetStore } from '@/server/store/store';
+import { seedUsers } from '@/server/store/seed/users.seed';
+import { getStore, resetStore } from '@/server/store/store';
 import { ctx, loginAs, req } from '../helpers/api';
 
 beforeEach(() => {
@@ -25,10 +26,14 @@ const getUsers = (cookie?: string) =>
   list(req('GET', '/api/users', { cookie }), ctx({}));
 const patch = (
   route: typeof editProfile,
-  id: string,
+  path: string,
   body: unknown,
   cookie: string,
-) => route(req('PATCH', `/api/users/${id}`, { body, cookie }), ctx({ id }));
+) =>
+  route(
+    req('PATCH', `/api/users/${path}`, { body, cookie }),
+    ctx({ id: path.split('/')[0] ?? '' }),
+  );
 
 describe('GET /api/users', () => {
   it('401 without a cookie, 403 for a user without users.list', async () => {
@@ -52,7 +57,9 @@ describe('GET /api/users', () => {
   it('lists everyone for Ivan and never includes a password', async () => {
     const res = await getUsers(await loginAs('ivan@example.com'));
     const text = await res.text();
-    expect((JSON.parse(text) as { items: unknown[] }).items).toHaveLength(12);
+    expect((JSON.parse(text) as { items: unknown[] }).items).toHaveLength(
+      seedUsers().length,
+    );
     expect(text).not.toContain('ivan123');
     expect(text).not.toContain('password');
   });
@@ -121,6 +128,30 @@ describe('POST /api/users', () => {
 });
 
 describe('PATCH /api/users/:id', () => {
+  it('ignores role, status and managerId on a profile edit', async () => {
+    const ivan = await loginAs('ivan@example.com');
+    const res = await patch(
+      editProfile,
+      'u-olena',
+      {
+        fullName: 'Olena B.',
+        role: 'IT',
+        status: 'deactivated',
+        managerId: null,
+        password: 'pwned',
+      },
+      ivan,
+    );
+    expect(res.status).toBe(200);
+    expect(getStore().users.get('u-olena')).toMatchObject({
+      fullName: 'Olena B.',
+      role: 'user',
+      status: 'active',
+      managerId: 'u-anna',
+      password: 'olena123',
+    });
+  });
+
   it('Anna cannot edit Dmytro but can edit Olena', async () => {
     const anna = await loginAs('anna@example.com');
     const denied = await patch(
@@ -158,7 +189,25 @@ describe('PATCH /api/users/:id/role and /status', () => {
     expect(await code(res)).toBe('forbidden');
   });
 
-  it('Ivan: self 403 self_change, Petro 200, self again 409 last_active_it', async () => {
+  it('403 forbidden for a manager or a user changing a status', async () => {
+    const asAnna = await patch(
+      changeStatus,
+      'u-olena/status',
+      { status: 'deactivated' },
+      await loginAs('anna@example.com'),
+    );
+    expect(asAnna.status).toBe(403);
+    expect(await code(asAnna)).toBe('forbidden');
+    const asOlena = await patch(
+      changeStatus,
+      'u-nazar/status',
+      { status: 'deactivated' },
+      await loginAs('olena@example.com'),
+    );
+    expect(asOlena.status).toBe(403);
+  });
+
+  it('Ivan: self 403 self_change, Petro 200, self again 409 last_active_in_role', async () => {
     const ivan = await loginAs('ivan@example.com');
     const first = await patch(
       changeStatus,
@@ -170,8 +219,14 @@ describe('PATCH /api/users/:id/role and /status', () => {
     expect(await code(first)).toBe('self_change');
 
     expect(
-      (await patch(changeStatus, 'u-petro', { status: 'deactivated' }, ivan))
-        .status,
+      (
+        await patch(
+          changeStatus,
+          'u-petro/status',
+          { status: 'deactivated' },
+          ivan,
+        )
+      ).status,
     ).toBe(200);
 
     const again = await patch(
@@ -181,7 +236,7 @@ describe('PATCH /api/users/:id/role and /status', () => {
       ivan,
     );
     expect(again.status).toBe(409);
-    expect(await code(again)).toBe('last_active_it');
+    expect(await code(again)).toBe('last_active_in_role');
   });
 
   it('deactivating Olena makes her next request fail with 401', async () => {
@@ -192,8 +247,14 @@ describe('PATCH /api/users/:id/role and /status', () => {
 
     const ivan = await loginAs('ivan@example.com');
     expect(
-      (await patch(changeStatus, 'u-olena', { status: 'deactivated' }, ivan))
-        .status,
+      (
+        await patch(
+          changeStatus,
+          'u-olena/status',
+          { status: 'deactivated' },
+          ivan,
+        )
+      ).status,
     ).toBe(200);
 
     expect(

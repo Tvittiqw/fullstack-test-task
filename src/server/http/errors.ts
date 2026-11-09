@@ -14,6 +14,9 @@ export class HttpError extends Error {
 export const unauthenticated = (): HttpError =>
   new HttpError(401, 'unauthenticated', 'Authentication required');
 
+export const invalidCredentials = (): HttpError =>
+  new HttpError(401, 'invalid_credentials', 'Invalid email or password');
+
 export const forbidden = (
   code = 'forbidden',
   message = 'Your role cannot perform this action',
@@ -30,6 +33,13 @@ export const badRequest = (
 
 export const conflict = (code: string, message: string): HttpError =>
   new HttpError(409, code, message);
+
+export const unsupportedMediaType = (): HttpError =>
+  new HttpError(
+    415,
+    'unsupported_media_type',
+    'Request body must be application/json',
+  );
 
 const DENIAL_STATUS: Record<Denial['kind'], number> = {
   forbidden: 403,

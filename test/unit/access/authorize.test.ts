@@ -24,6 +24,18 @@ describe('canOnUser', () => {
     expect(canOnUser(anna, 'users.editProfile', nazar)).toBe(false);
   });
 
+  it('does not let a manager edit a manager or IT account that reports to them', () => {
+    const promoted = user({
+      id: 'u-promoted',
+      role: 'manager',
+      managerId: anna.id,
+    });
+    const admin = user({ id: 'u-admin', role: 'IT', managerId: anna.id });
+    expect(canOnUser(anna, 'users.editProfile', promoted)).toBe(false);
+    expect(canOnUser(anna, 'users.editProfile', admin)).toBe(false);
+    expect(visibleUsers(anna, [olena, promoted, admin])).toEqual([olena]);
+  });
+
   it('denies a user even when the target points at them as manager', () => {
     const stray = user({ id: 'u-stray', role: 'user', managerId: nazar.id });
     expect(canOnUser(nazar, 'users.editProfile', stray)).toBe(false);

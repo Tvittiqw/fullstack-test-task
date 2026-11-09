@@ -3,12 +3,13 @@ import { USER_STATUSES } from '@/shared/api-types';
 import { ROLES } from '@/shared/roles';
 
 const fullName = z.string().trim().min(1).max(120);
-const email = z.string().trim().toLowerCase().pipe(z.email());
+export const emailSchema = z.string().trim().toLowerCase().pipe(z.email());
+const email = emailSchema;
 
 export const createUserSchema = z.object({
   fullName,
   email,
-  password: z.string().min(4).max(72),
+  password: z.string().min(4),
   role: z.enum(ROLES),
   managerId: z.string().min(1).nullable().optional(),
 });

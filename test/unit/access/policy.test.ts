@@ -34,6 +34,14 @@ describe('policyFor', () => {
   });
 });
 
+describe('keepOneActive', () => {
+  it('protects only the role that administers users', () => {
+    expect(policyFor('IT').keepOneActive).toBe(true);
+    expect(policyFor('manager').keepOneActive).toBe(false);
+    expect(policyFor('user').keepOneActive).toBe(false);
+  });
+});
+
 describe('canManageReports', () => {
   it('is true only for the role scoped to direct reports', () => {
     expect(canManageReports('manager')).toBe(true);

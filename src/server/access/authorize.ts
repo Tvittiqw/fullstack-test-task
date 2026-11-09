@@ -6,10 +6,14 @@ export function can(actor: PublicUser, permission: Permission): boolean {
   return policyFor(actor.role).permissions.has(permission);
 }
 
-function inScope(actor: PublicUser, target: PublicUser): boolean {
+export function withinScope(actor: PublicUser, target: PublicUser): boolean {
   const scope = policyFor(actor.role).userScope;
   if (scope === 'all') return true;
-  if (scope === 'reports') return target.managerId === actor.id;
+  if (scope === 'reports') {
+    return (
+      target.managerId === actor.id && policyFor(target.role).userScope === null
+    );
+  }
   return false;
 }
 
@@ -18,12 +22,12 @@ export function canOnUser(
   permission: Permission,
   target: PublicUser,
 ): boolean {
-  return can(actor, permission) && inScope(actor, target);
+  return can(actor, permission) && withinScope(actor, target);
 }
 
 export function visibleUsers(
   actor: PublicUser,
   all: PublicUser[],
 ): PublicUser[] {
-  return all.filter((target) => inScope(actor, target));
+  return all.filter((target) => withinScope(actor, target));
 }

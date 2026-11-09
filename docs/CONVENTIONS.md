@@ -4,13 +4,13 @@
 
 - A zod schema is the DTO. Infer the type from it, never declare both.
 - Enums come from the shared const arrays: `z.enum(ROLES)`, `z.enum(USER_STATUSES)`.
-- Request bodies are parsed with `parseBody(request, schema)`, queries with `parseQuery(url, schema)`. Zod errors become 400 `validation`.
+- Request bodies are parsed with `parseBody(request, schema)`, queries with `parseQuery(request, schema)`. A non-JSON body is 415, malformed JSON is 400 `invalid_json`, schema errors are 400 `validation`.
 
 ## Errors
 
 - Throw `HttpError(status, code, message, details?)` from `src/server/http/errors.ts`.
 - Every route handler is wrapped in `handle()`. The response envelope is always `{ error: { code, message, details? } }`.
-- Denials from `access/user-change.ts` are mapped by `fromDenial` in `require-permission.ts`; do not map them by hand. New denial reasons are rows of `DENIALS`.
+- Denials from `access/user-change.ts` are mapped by `fromDenial` in `http/errors.ts`; do not map them by hand. New denial reasons are rows of `DENIALS`.
 
 ## Types
 

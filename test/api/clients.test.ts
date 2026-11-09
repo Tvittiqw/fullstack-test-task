@@ -59,6 +59,18 @@ describe('GET /api/clients', () => {
 });
 
 describe('GET /api/clients/:id', () => {
+  it('401 without a cookie, 403 for IT', async () => {
+    const path = '/api/clients/c-0001';
+    expect((await detail(req('GET', path), ctx({ id: 'c-0001' }))).status).toBe(
+      401,
+    );
+    const ivan = await loginAs('ivan@example.com');
+    expect(
+      (await detail(req('GET', path, { cookie: ivan }), ctx({ id: 'c-0001' })))
+        .status,
+    ).toBe(403);
+  });
+
   it('200 for a known id, 404 for an unknown one', async () => {
     const olena = await loginAs('olena@example.com');
     const first = getStore().clients[0];

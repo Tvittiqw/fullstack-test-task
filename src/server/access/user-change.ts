@@ -1,6 +1,7 @@
 import type { PublicUser, UserStatus } from '@/shared/api-types';
 import type { Role } from '@/shared/roles';
-import { can } from './authorize';
+import { withinScope } from './authorize';
+import { policyFor } from './policy';
 
 export type Denial = {
   kind: 'forbidden' | 'conflict';
@@ -13,10 +14,15 @@ export type Decision = { ok: true } | { ok: false; denial: Denial };
 export type UserChange = { role: Role } | { status: UserStatus };
 
 export const DENIALS = {
-  lastActiveIt: {
+  outOfScope: {
+    kind: 'forbidden',
+    code: 'out_of_scope',
+    message: 'You can only manage your direct reports',
+  },
+  lastActiveInRole: {
     kind: 'conflict',
-    code: 'last_active_it',
-    message: 'Cannot remove the last active IT user',
+    code: 'last_active_in_role',
+    message: 'Cannot deactivate or demote the last active user of this role',
   },
   selfChange: {
     kind: 'forbidden',
@@ -25,20 +31,30 @@ export const DENIALS = {
   },
 } as const satisfies Record<string, Denial>;
 
-function removesTarget(target: PublicUser, change: UserChange): boolean {
-  if ('status' in change) return change.status === 'deactivated';
-  if ('role' in change) return change.role !== target.role;
-  return change satisfies never;
+const allow: Decision = { ok: true };
+const deny = (denial: Denial): Decision => ({ ok: false, denial });
+
+export function authorizeTargetEdit(
+  actor: PublicUser,
+  target: PublicUser,
+): Decision {
+  return withinScope(actor, target) ? allow : deny(DENIALS.outOfScope);
 }
 
-function removesLastActiveAdmin(
+function removesFromRole(target: PublicUser, change: UserChange): boolean {
+  if ('status' in change) return change.status === 'deactivated';
+  if ('role' in change) return change.role !== target.role;
+  throw new Error('Unknown user change');
+}
+
+function removesLastActiveOfProtectedRole(
   target: PublicUser,
   change: UserChange,
   users: Iterable<PublicUser>,
 ): boolean {
   if (target.status !== 'active') return false;
-  if (!can(target, 'users.changeStatus')) return false;
-  if (!removesTarget(target, change)) return false;
+  if (!policyFor(target.role).keepOneActive) return false;
+  if (!removesFromRole(target, change)) return false;
   for (const other of users) {
     if (
       other.id !== target.id &&
@@ -51,19 +67,19 @@ function removesLastActiveAdmin(
   return true;
 }
 
-const deny = (denial: Denial): Decision => ({ ok: false, denial });
-
 export function authorizeUserChange(
   actor: PublicUser,
   target: PublicUser,
   change: UserChange,
   users: Iterable<PublicUser>,
 ): Decision {
-  if (removesLastActiveAdmin(target, change, users)) {
-    return deny(DENIALS.lastActiveIt);
+  const scope = authorizeTargetEdit(actor, target);
+  if (!scope.ok) return scope;
+  if (removesLastActiveOfProtectedRole(target, change, users)) {
+    return deny(DENIALS.lastActiveInRole);
   }
-  if (target.id === actor.id && removesTarget(target, change)) {
+  if (target.id === actor.id && removesFromRole(target, change)) {
     return deny(DENIALS.selfChange);
   }
-  return { ok: true };
+  return allow;
 }

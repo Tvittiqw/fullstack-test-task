@@ -2,7 +2,7 @@ import type { Client } from '@/shared/api-types';
 import seedrandom from 'seedrandom';
 
 export const CLIENT_COUNT = 1200;
-export const CLIENT_SEED = 'user-management-2026';
+const CLIENT_SEED = 'user-management-2026';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const THREE_YEARS_MS = 3 * 365 * DAY_MS;

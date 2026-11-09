@@ -99,7 +99,7 @@ fullstack-test-task/
 Import boundaries (enforced by review, stated in docs and agent files):
 - `src/shared/**` imports nothing from the project. It holds `ROLES`, `PERMISSIONS` and response types, and is the only place either side may import role values from.
 - `src/server/**` imports only from `src/server/**` and `src/shared/**`. Never from `src/app` or `src/ui`.
-- `src/app/api/**` route handlers import `src/server/**` only. No logic in them beyond parse → authorize → service → respond.
+- `src/app/api/**` route handlers import `src/server/**` only. No logic in them beyond authorize → parse → service → respond.
 - `src/app/**/page.tsx` (server components) may import `src/server/**` for reads and auth. Client components (`'use client'`) import only `src/ui/**`.
 - `src/ui/**` imports `src/shared/**` for types and the `ROLES` list (role `<select>` options) and never `src/server/**`. The browser learns what it *may do* only through the `permissions` list returned by `/api/auth/me`; `ROLES` is display data, not a decision.
 
@@ -154,11 +154,11 @@ export type Permission = (typeof PERMISSIONS)[number];
 `src/server/access/policy.ts`
 ```ts
 type UserScope = 'all' | 'reports';
-type RolePolicy = { permissions: ReadonlySet<Permission>; userScope: UserScope | null; landingRoute: string };
+type RolePolicy = { permissions: ReadonlySet<Permission>; userScope: UserScope | null; keepOneActive: boolean; landingRoute: string };
 export const ROLE_POLICY: Record<Role, RolePolicy> = {
-  IT:      { permissions: set('users.list','users.create','users.editProfile','users.changeRole','users.changeStatus'), userScope: 'all',     landingRoute: '/manage-users' },
-  manager: { permissions: set('users.list','users.editProfile','content.view'),                                         userScope: 'reports', landingRoute: '/content' },
-  user:    { permissions: set('content.view'),                                                                          userScope: null,      landingRoute: '/content' },
+  IT:      { permissions: set('users.list','users.create','users.editProfile','users.changeRole','users.changeStatus'), userScope: 'all',     keepOneActive: true,  landingRoute: '/manage-users' },
+  manager: { permissions: set('users.list','users.editProfile','content.view'),                                         userScope: 'reports', keepOneActive: false, landingRoute: '/content' },
+  user:    { permissions: set('content.view'),                                                                          userScope: null,      keepOneActive: false, landingRoute: '/content' },
 };
 ```
 `Record<Role, …>` makes a fourth role a compile error until its policy row exists. Nothing else in the codebase branches on `Role` values. Other consumers of `ROLES` are zod's `z.enum(ROLES)` in `users.schema.ts`, the role `<select>` in the UI, and the seed. "Can manage other users" is derived from the policy (`userScope === 'reports'`), never from `role === 'manager'`: `usersService.managerCandidates()` returns active users whose role has that scope, and `POST /api/users` validates `managerId` against the same set.
@@ -175,7 +175,8 @@ type Decision = { ok: true } | { ok: false; denial: Denial };
 export function can(actor: Actor, permission: Permission): boolean;
 export function canOnUser(actor: Actor, permission: Permission, target: PublicUser): boolean;
 export function visibleUsers(actor: Actor, all: PublicUser[]): PublicUser[];
-export function authorizeUserChange(actor: Actor, target: PublicUser, change: UserChange, store: Pick<Store, 'users'>): Decision;
+export function authorizeTargetEdit(actor: Actor, target: PublicUser): Decision;
+export function authorizeUserChange(actor: Actor, target: PublicUser, change: UserChange, users: Iterable<PublicUser>): Decision;
 ```
 
 Rules encoded there, and only there:
@@ -183,20 +184,20 @@ Rules encoded there, and only there:
 | # | Rule | Implementation |
 |---|---|---|
 | 1 | Only IT creates users, changes role or status | `can(actor, 'users.create' / 'users.changeRole' / 'users.changeStatus')` via policy |
-| 2 | Manager edits fullName/email only for users with `managerId === actor.id` | `canOnUser`: `userScope === 'all'` → true; `'reports'` → `target.managerId === actor.id`; `null` → false. Not self, not other managers, not unassigned follow from that single comparison |
-| 4 | Never zero active IT | `authorizeUserChange`, checked **first**: target is active IT and change removes that (status → deactivated, or role → non-IT) and `activeItCount(store) === 1` → `conflict`, code `last_active_it` |
+| 2 | Manager edits fullName/email only for users with `managerId === actor.id` | `canOnUser`: `userScope === 'all'` → true; `'reports'` → `target.managerId === actor.id` and the target's role has `userScope: null`; `null` → false. Not self, not other managers, not unassigned, not an IT/manager account that happens to report to her (decided 2026-11-09). `POST /api/users` refuses `managerId` for roles with a user scope |
+| 4 | Never zero active IT | `authorizeUserChange`, checked after scope and **before** self-change: target is active, its role has `keepOneActive: true`, the change removes them from their role (status → deactivated, or a different role) and no other active user has that role → `conflict`, code `last_active_in_role`. Literal-free: the flag is a policy column (decided 2026-11-09) |
 | 3 | Nobody deactivates or demotes themselves | `authorizeUserChange`, checked **second**: `target.id === actor.id` and change is `status: 'deactivated'` or `role` away from current → `forbidden`, code `self_change` |
 | 5 | Deactivation immediate | Not a policy rule: `require-session.ts` reloads the user per request and rejects `status !== 'active'` (§8) |
 | 6 | Fourth role in one place | `ROLES` + `ROLE_POLICY` row |
 
 Scope for listing (`/manage-users`, `GET /api/users`): `visibleUsers` applies `userScope` ('all' → everyone, 'reports' → `managerId === actor.id`). IT sees itself in the list but rule 3 still blocks self status/role change.
 
-HTTP mapping of a `Denial`: `forbidden` → 403, `conflict` → 409. Order matters: since only an active IT can change status, `last_active_it` can only ever fire when the target is the actor, so it must be evaluated before `self_change`. Scenario 5 then reads: Ivan deactivates himself with two active IT → 403 `self_change`; deactivates Petro → 200; deactivates himself again → 409 `last_active_it`. Two different reasons, as required. Unit tests pin this order.
+HTTP mapping of a `Denial`: `forbidden` → 403, `conflict` → 409. Order matters: since only an active IT can change status, `last_active_in_role` can only ever fire when the target is the actor, so it must be evaluated before `self_change`. Scenario 5 then reads: Ivan deactivates himself with two active IT → 403 `self_change`; deactivates Petro → 200; deactivates himself again → 409 `last_active_in_role`. Two different reasons, as required. Unit tests pin this order.
 
 ### Where permission decisions are made (README list)
 
 1. `src/server/access/policy.ts` — the matrix.
-2. `src/server/access/authorize.ts` — scope rules; `src/server/access/user-change.ts` — invariant rules.
+2. `src/server/access/authorize.ts` — scope rules; `src/server/access/user-change.ts` — target scope and invariant rules as `Decision`s. Services (`users.service.ts`) only call these and map the result with `fromDenial`.
 3. `src/server/auth/require-session.ts` — authentication and active-status check.
 4. `src/server/auth/require-permission.ts` — the one wrapper route handlers call; it composes 3 + `can`.
 5. `src/server/page-auth.ts` — same composition for pages, producing redirect / Forbidden instead of HTTP codes.
@@ -214,7 +215,7 @@ Route handlers and pages contain no other checks.
 
 ## 9. HTTP API
 
-Envelope: success returns the resource JSON directly; errors return `{ error: { code: string; message: string; details?: unknown } }` with the HTTP status. `http/handle.ts` wraps every route handler: catches `HttpError` → envelope, `ZodError` → 400 `validation`, anything else → 500 `internal` (logged).
+Envelope: success returns the resource JSON directly; errors return `{ error: { code: string; message: string; details?: unknown } }` with the HTTP status. `http/handle.ts` wraps every route handler: catches `HttpError` → envelope, anything else → 500 `internal` (logged). `parseBody`/`parseQuery` use `safeParse` and throw `HttpError` 400 `validation` themselves; a non-JSON content type is 415.
 
 | Method & path | Permission | Body / query | Response |
 |---|---|---|---|
@@ -225,8 +226,8 @@ Envelope: success returns the resource JSON directly; errors return `{ error: { 
 | `GET /api/users/managers` | `users.create` | — | 200 `{ items: PublicUser[] }` active users whose role policy has `userScope: 'reports'`; feeds the manager dropdown |
 | `POST /api/users` | `users.create` | `{ fullName, email, password, role, managerId? }` | 201 `PublicUser` / 400 / 409 `email_taken` |
 | `PATCH /api/users/:id` | `users.editProfile` + `canOnUser` | `{ fullName?, email? }` at least one | 200 / 403 `out_of_scope` / 404 / 409 |
-| `PATCH /api/users/:id/role` | `users.changeRole` + `authorizeUserChange` | `{ role }` | 200 / 403 `self_change` / 409 `last_active_it` |
-| `PATCH /api/users/:id/status` | `users.changeStatus` + `authorizeUserChange` | `{ status }` | 200 / 403 `self_change` / 409 `last_active_it` |
+| `PATCH /api/users/:id/role` | `users.changeRole` + `authorizeUserChange` | `{ role }` | 200 / 403 `self_change` / 409 `last_active_in_role` |
+| `PATCH /api/users/:id/status` | `users.changeStatus` + `authorizeUserChange` | `{ status }` | 200 / 403 `self_change` / 409 `last_active_in_role` |
 | `GET /api/clients` | `content.view` | `?page=1&limit=25` (limit 1–100, default 25) | 200 `{ items, total, page, limit }` |
 | `GET /api/clients/:id` | `content.view` | — | 200 `Client` / 404 |
 
@@ -246,7 +247,7 @@ Role / status endpoints are separate from profile edit on purpose: one permissio
 | `/manage-users` | `users.list` | server shell + client `UsersTable`: rows from `GET /api/users`; per-row inline edit of fullName/email (shown when `permissions` include `users.editProfile`), role `<select>` over `ROLES` and status toggle (shown when `users.changeRole` / `users.changeStatus` present); create form (`users.create`) with password field and manager dropdown from `GET /api/users/managers`. Every action calls the API and re-fetches; API errors are shown verbatim from the envelope |
 | Forbidden | — | `Forbidden.tsx` rendered in place by `requirePagePermission` with the text "403 — your role (<role>) cannot access this page" and a link to the landing route. Never a redirect |
 
-`Nav.tsx` receives `Me` from the layout and shows links only for permitted areas plus a Logout button. Hiding links is UX; it is not a check.
+`Nav.tsx` is a fixed left sidebar (dark theme, one green accent, per the client's visual language; wireframes and design system approved 2026-11-09). It receives `Me` and shows links only for permitted areas, the user's name with a role badge, and a Logout button. Under 720px it becomes a top bar. Hiding links is UX; it is not a check. The stylesheet comes from the design system and replaces `src/app/globals.css`.
 
 Client-side `api-client.ts`: `credentials: 'same-origin'`, parses the envelope, on 401 performs `window.location.assign('/login?expired=1')`. That is scenario 6: Olena's next page click returns 401 and she lands on `/login`.
 
@@ -265,7 +266,7 @@ TDD order per module: test file first, then implementation. `npm test` must be g
 
 ## 12. Agent instructions and docs
 
-- `AGENTS.md`, `CLAUDE.md`: concise-communication rule, plans end with unresolved questions, npm, key commands, links to docs. Both identical except the title line.
+- `AGENTS.md`: npm, key commands, layout and boundaries, hard rules, counter-intuitive facts, fourth-role steps, links to docs. Personal interaction preferences were dropped 2026-11-09 (the task penalises advice that is not project-specific). `CLAUDE.md` is a single `@AGENTS.md` import.
 - `docs/ARCHITECTURE.md`: layers table (route handler / service / repository over the store), layout, import boundaries, the access module, the `globalThis` store.
 - `docs/CONVENTIONS.md`: zod schema = DTO, `z.enum(ROLES)`, error envelope, no role literals, `PublicUser` only leaves the server, no comments in code, explicit return types on exported server functions.
 - `docs/TESTING.md`: what to test where, store reset, route handler invocation pattern.

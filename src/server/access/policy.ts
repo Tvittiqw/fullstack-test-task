@@ -6,14 +6,16 @@ export type UserScope = 'all' | 'reports';
 export type RolePolicy = {
   permissions: ReadonlySet<Permission>;
   userScope: UserScope | null;
+  keepOneActive: boolean;
   landingRoute: string;
 };
 
-const set = (...perms: Permission[]): ReadonlySet<Permission> => new Set(perms);
+const permissionSet = (...perms: Permission[]): ReadonlySet<Permission> =>
+  new Set(perms);
 
 export const ROLE_POLICY: Record<Role, RolePolicy> = {
   IT: {
-    permissions: set(
+    permissions: permissionSet(
       'users.list',
       'users.create',
       'users.editProfile',
@@ -21,16 +23,23 @@ export const ROLE_POLICY: Record<Role, RolePolicy> = {
       'users.changeStatus',
     ),
     userScope: 'all',
+    keepOneActive: true,
     landingRoute: '/manage-users',
   },
   manager: {
-    permissions: set('users.list', 'users.editProfile', 'content.view'),
+    permissions: permissionSet(
+      'users.list',
+      'users.editProfile',
+      'content.view',
+    ),
     userScope: 'reports',
+    keepOneActive: false,
     landingRoute: '/content',
   },
   user: {
-    permissions: set('content.view'),
+    permissions: permissionSet('content.view'),
     userScope: null,
+    keepOneActive: false,
     landingRoute: '/content',
   },
 };

@@ -45,6 +45,18 @@ describe('parseBody', () => {
     } satisfies Partial<HttpError>);
   });
 
+  it('rejects a non-JSON content type with 415', async () => {
+    const plain = new Request('http://localhost/x', {
+      method: 'POST',
+      body: '{"name":"x"}',
+      headers: { 'content-type': 'text/plain' },
+    });
+    await expect(parseBody(plain, schema)).rejects.toMatchObject({
+      status: 415,
+      code: 'unsupported_media_type',
+    });
+  });
+
   it('rejects schema violations with 400 validation and details', async () => {
     await expect(
       parseBody(request('{"name":1}'), schema),

@@ -4,8 +4,8 @@
 
 | Layer | Owns | Never does |
 |-------|------|------------|
-| **Route handler** (`src/app/api/**`) | HTTP mapping: parse, call `requirePermission`, call service, respond | Business decisions, store access |
-| **Service** (`src/server/<domain>/*.service.ts`) | Business logic, invariants, calls into `access/` | Store internals, HTTP types |
+| **Route handler** (`src/app/api/**`) | HTTP mapping: `requirePermission`, then parse, then service, then respond | Business decisions, store access |
+| **Service** (`src/server/<domain>/*.service.ts`) | Business logic, calls into `access/`, maps denials with `fromDenial`, throws `HttpError` | Store internals, `Request`/`Response` objects, role comparisons |
 | **Repository** (`src/server/<domain>/*.repository.ts`) | Reads and writes against the store, strips `password` | Business decisions |
 | **Store** (`src/server/store/`) | The in-memory data and the seed | Logic |
 
@@ -26,19 +26,19 @@ src/
     page-auth.ts                  session and permission checks for server components
   ui/           api-client.ts, components/
 test/
-  unit/         access, users, clients
+  unit/         store, access, http, users, clients
   api/          auth, users, clients, scenarios
-  helpers/      request builders, loginAs
+  helpers/      request builders, loginAs, user fixtures
 ```
 
 Import direction: `shared` ← `server` ← `app`. `ui` sees only `shared`.
 
 ## Access module
 
-- `policy.ts`: `ROLE_POLICY: Record<Role, RolePolicy>`. Each row has `permissions`, `userScope` (`'all' | 'reports' | null`) and `landingRoute`. A new role without a row does not compile.
-- `authorize.ts`: permission and scope lookups, `can(actor, permission)`, `canOnUser(actor, permission, target)`, `visibleUsers(actor, all)`.
-- `user-change.ts`: the invariants on role and status changes, `authorizeUserChange(actor, target, change, users)`. Returns `{ ok: true }` or `{ ok: false, denial }`. Each denial is a row of `DENIALS`: `lastActiveIt` (kind `conflict`, 409) and `selfChange` (kind `forbidden`, 403).
-- Evaluation order inside a mutating request: session 401 → permission 403 → body 400 → target 404 → `last_active_it` 409 → `self_change` 403 → write.
+- `policy.ts`: `ROLE_POLICY: Record<Role, RolePolicy>`. Each row has `permissions`, `userScope` (`'all' | 'reports' | null`), `keepOneActive` and `landingRoute`. A new role without a row does not compile.
+- `authorize.ts`: permission and scope lookups, `can(actor, permission)`, `canOnUser(actor, permission, target)`, `visibleUsers(actor, all)`. The `reports` scope reaches a target only if `target.managerId === actor.id` and the target's own role has no user scope.
+- `user-change.ts`: decisions about a target user. `authorizeTargetEdit(actor, target)` checks scope; `authorizeUserChange(actor, target, change, users)` checks scope, then the invariants on role and status changes. Both return `{ ok: true }` or `{ ok: false, denial }`. Each denial is a row of `DENIALS`: `outOfScope` (403), `lastActiveInRole` (409, roles with `keepOneActive`), `selfChange` (403).
+- Evaluation order inside a mutating request: session 401 → permission 403 → body 400 → target 404 → `out_of_scope` 403 → `last_active_in_role` 409 → `self_change` 403 → write.
 
 ## Sessions
 
