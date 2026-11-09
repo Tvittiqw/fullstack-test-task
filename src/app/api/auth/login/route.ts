@@ -9,7 +9,7 @@ import { handle } from '@/server/http/handle';
 import { json } from '@/server/http/respond';
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
   password: z.string().min(1),
 });
 

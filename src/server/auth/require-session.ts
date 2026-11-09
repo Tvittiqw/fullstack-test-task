@@ -1,7 +1,7 @@
 import type { PublicUser } from '@/shared/api-types';
 import { unauthenticated } from '@/server/http/errors';
 import { getStore } from '@/server/store/store';
-import { toPublic } from './credentials';
+import { toPublic } from '@/server/users/users.repository';
 import { readSessionToken } from './session-cookie';
 import { deleteSession, findSession } from './sessions';
 

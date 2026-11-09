@@ -1,9 +1,6 @@
 import type { PublicUser } from '@/shared/api-types';
-import { getStore, type User } from '@/server/store/store';
-
-export function toPublic({ password: _password, ...user }: User): PublicUser {
-  return user;
-}
+import { getStore } from '@/server/store/store';
+import { toPublic } from '@/server/users/users.repository';
 
 export function authenticate(
   email: string,
