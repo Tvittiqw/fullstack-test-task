@@ -25,7 +25,7 @@ export async function apiFetch<T>(
   const body: unknown = await res.json();
   if (res.ok) return body as T;
   const { error } = body as ErrorEnvelope;
-  if (res.status === 401) hardNavigate('/login?expired=1');
+  if (error.code === 'unauthenticated') hardNavigate('/login?expired=1');
   throw new ApiError(res.status, error.code, error.message);
 }
 
