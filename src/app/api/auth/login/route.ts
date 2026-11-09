@@ -1,4 +1,4 @@
-import { loginSchema } from '@/server/auth/auth.schema';
+import { loginSchema } from '@/shared/schemas/auth';
 import { authenticate } from '@/server/auth/credentials';
 import { toMe } from '@/server/auth/me';
 import { sessionCookie } from '@/server/auth/session-cookie';

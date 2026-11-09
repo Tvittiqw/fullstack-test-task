@@ -2,7 +2,7 @@ import { requirePermission } from '@/server/auth/require-permission';
 import { parseBody } from '@/server/http/body';
 import { handle } from '@/server/http/handle';
 import { json } from '@/server/http/respond';
-import { changeRoleSchema } from '@/server/users/users.schema';
+import { changeRoleSchema } from '@/shared/schemas/users';
 import { changeRole } from '@/server/users/users.service';
 
 export const PATCH = handle<{ id: string }>(async (request, ctx) => {

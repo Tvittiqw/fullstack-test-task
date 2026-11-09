@@ -20,7 +20,10 @@ import {
   listUsers,
   updateUser,
 } from './users.repository';
-import type { CreateUserInput, UpdateProfileInput } from './users.schema';
+import type {
+  CreateUserInput,
+  UpdateProfileInput,
+} from '@/shared/schemas/users';
 
 export function listVisibleUsers(actor: PublicUser): PublicUser[] {
   return visibleUsers(actor, listUsers());
