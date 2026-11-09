@@ -1,5 +1,7 @@
+import { z } from 'zod';
 import type { PublicUser, UserStatus } from '@/shared/api-types';
-import type { Role } from '@/shared/roles';
+import { ROLES, type Role } from '@/shared/roles';
+import { createUserSchema } from '@/shared/schemas/users';
 import { apiFetch } from '@/ui/api-client';
 
 export type CreateUserBody = {
@@ -37,9 +39,12 @@ export const usersApi = {
     patch(`/api/users/${id}/status`, { status }),
 };
 
-type CreateUserFormValues = Omit<CreateUserBody, 'managerId'> & {
-  managerId: string;
-};
+export const createUserFormSchema = createUserSchema.extend({
+  role: z.string().pipe(z.enum(ROLES, 'Select a role')),
+  managerId: z.string(),
+});
+export type CreateUserFormInput = z.input<typeof createUserFormSchema>;
+export type CreateUserFormValues = z.output<typeof createUserFormSchema>;
 
 export function toCreateUserBody(values: CreateUserFormValues): CreateUserBody {
   return { ...values, managerId: values.managerId || null };

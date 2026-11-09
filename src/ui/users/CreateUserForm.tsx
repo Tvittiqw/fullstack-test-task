@@ -2,36 +2,37 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { z } from 'zod';
 import { ROLES } from '@/shared/roles';
-import { createUserSchema } from '@/shared/schemas/users';
 import { errorText } from '@/ui/api-client';
 import { ErrorMessage } from '@/ui/primitives/ErrorMessage';
 import { Button } from '@/ui/primitives/Button';
 import { SelectField } from '@/ui/primitives/SelectField';
 import { TextField } from '@/ui/primitives/TextField';
-import { toCreateUserBody } from './users-api';
+import {
+  createUserFormSchema,
+  type CreateUserFormInput,
+  type CreateUserFormValues,
+  toCreateUserBody,
+} from './users-api';
 import { useCreateUser, useManagers } from './users-queries';
 
-const createUserFormSchema = createUserSchema.extend({ managerId: z.string() });
-type CreateUserFormValues = z.infer<typeof createUserFormSchema>;
-
-const EMPTY: CreateUserFormValues = {
+const EMPTY: CreateUserFormInput = {
   fullName: '',
   email: '',
   password: '',
-  role: ROLES[0],
+  role: '',
   managerId: '',
 };
 
 export function CreateUserForm() {
-  const form = useForm<CreateUserFormValues>({
+  const form = useForm<CreateUserFormInput, unknown, CreateUserFormValues>({
     resolver: zodResolver(createUserFormSchema),
     defaultValues: EMPTY,
   });
   const { errors } = form.formState;
   const managers = useManagers();
   const create = useCreateUser(() => form.reset(EMPTY));
+  const formError = create.error ?? managers.error;
 
   return (
     <form
@@ -67,6 +68,7 @@ export function CreateUserForm() {
           error={errors.role?.message}
           {...form.register('role')}
         >
+          <option value="">Select a role</option>
           {ROLES.map((role) => (
             <option key={role} value={role}>
               {role}
@@ -82,15 +84,7 @@ export function CreateUserForm() {
           ))}
         </SelectField>
       </div>
-      <ErrorMessage
-        error={
-          create.error
-            ? errorText(create.error)
-            : managers.error
-              ? errorText(managers.error)
-              : null
-        }
-      />
+      <ErrorMessage error={formError ? errorText(formError) : null} />
       <div className="form-actions">
         <Button
           type="submit"
