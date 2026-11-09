@@ -1,13 +1,13 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Me } from '@/shared/api-types';
-import { apiFetch, errorText } from '@/ui/api-client';
-import { ErrorMessage } from './ErrorMessage';
+import { apiFetch, errorText, hardNavigate } from '@/ui/api-client';
+import { ErrorMessage } from '@/ui/primitives/ErrorMessage';
 
-export function LoginForm({ clearStale }: { clearStale: boolean }) {
-  const router = useRouter();
+type LoginFormProps = { clearStale: boolean };
+
+export function LoginForm({ clearStale }: LoginFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -28,7 +28,7 @@ export function LoginForm({ clearStale }: { clearStale: boolean }) {
           password: form.get('password'),
         }),
       });
-      router.push(me.landingRoute);
+      hardNavigate(me.landingRoute);
     } catch (err) {
       setError(errorText(err));
       setPending(false);

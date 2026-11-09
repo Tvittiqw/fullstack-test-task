@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark;
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --text-sm: 13px;
   --text-md: 14px;
@@ -257,6 +258,10 @@ a:hover {
   border-radius: var(--radius);
   color: var(--color-text);
   font: inherit;
+}
+.input:-webkit-autofill {
+  -webkit-text-fill-color: var(--color-text);
+  box-shadow: inset 0 0 0 100px var(--color-bg);
 }
 .input:focus,
 .select:focus {

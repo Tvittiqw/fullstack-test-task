@@ -25,10 +25,12 @@ export async function apiFetch<T>(
   const body: unknown = await res.json();
   if (res.ok) return body as T;
   const { error } = body as ErrorEnvelope;
-  if (res.status === 401) {
-    window.location.assign(new URL('/login?expired=1', window.location.origin));
-  }
+  if (res.status === 401) hardNavigate('/login?expired=1');
   throw new ApiError(res.status, error.code, error.message);
+}
+
+export function hardNavigate(path: string): void {
+  window.location.assign(new URL(path, window.location.origin));
 }
 
 export function errorText(error: unknown): string {

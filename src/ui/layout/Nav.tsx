@@ -1,28 +1,26 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import type { Me } from '@/shared/api-types';
 import type { Permission } from '@/shared/permissions';
-import { apiFetch } from '@/ui/api-client';
+import { SidebarUser } from './SidebarUser';
 
-const LINKS: { href: string; label: string; permission: Permission }[] = [
+type NavLink = { href: string; label: string; permission: Permission };
+
+const LINKS: NavLink[] = [
   { href: '/content', label: 'Content', permission: 'content.view' },
   { href: '/content/me', label: 'Me', permission: 'content.view' },
   { href: '/manage-users', label: 'Manage users', permission: 'users.list' },
 ];
 
-export function Nav({ me }: { me: Me }) {
+type NavProps = { me: Me };
+
+export function Nav({ me }: NavProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const links = LINKS.filter((link) =>
     me.permissions.includes(link.permission),
   );
-
-  async function logout() {
-    await apiFetch<void>('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
-  }
 
   return (
     <aside className="sidebar">
@@ -42,19 +40,7 @@ export function Nav({ me }: { me: Me }) {
           </Link>
         ))}
       </nav>
-      <div className="sidebar__user">
-        <div>
-          <div className="sidebar__name">{me.user.fullName}</div>
-          <span className="badge badge--role">{me.user.role}</span>
-        </div>
-        <button
-          type="button"
-          className="btn btn--secondary btn--sm"
-          onClick={() => void logout()}
-        >
-          Log out
-        </button>
-      </div>
+      <SidebarUser user={me.user} />
     </aside>
   );
 }
