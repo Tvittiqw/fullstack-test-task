@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { toMe } from '@/server/auth/me';
 import { currentUser } from '@/server/page-auth';
 import { Nav } from '@/ui/layout/Nav';
+import { QueryProvider } from '@/ui/query-client';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -16,14 +17,16 @@ export default async function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
       <body>
-        {user ? (
-          <div className="app">
-            <Nav me={toMe(user)} />
-            <main className="main">{children}</main>
-          </div>
-        ) : (
-          children
-        )}
+        <QueryProvider>
+          {user ? (
+            <div className="app">
+              <Nav me={toMe(user)} />
+              <main className="main">{children}</main>
+            </div>
+          ) : (
+            children
+          )}
+        </QueryProvider>
       </body>
     </html>
   );
