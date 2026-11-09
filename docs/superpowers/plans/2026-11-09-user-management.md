@@ -148,7 +148,7 @@ git commit -m "docs: agent files, architecture docs, spec and plan"
 
 **Files:**
 - Create: `src/shared/roles.ts`, `src/shared/permissions.ts`, `src/shared/api-types.ts`
-- Create: `src/server/store/store.ts`, `src/server/store/seed/prng.ts`, `src/server/store/seed/clients.generator.ts`, `src/server/store/seed/users.seed.ts`
+- Create: `src/server/store/store.ts`, `src/server/store/types.ts`, `src/server/store/seed/clients.generator.ts`, `src/server/store/seed/users.seed.ts`
 - Test: `test/unit/store/clients.generator.test.ts`, `test/unit/store/users.seed.test.ts`, `test/unit/store/store.test.ts`
 
 **Interfaces:**
@@ -176,12 +176,10 @@ export type Session = { token: string; userId: string; createdAt: string };
 export type Store = { users: Map<string, User>; clients: Client[]; sessions: Map<string, Session> };
 export function getStore(): Store;
 export function resetStore(): Store;
-// src/server/store/seed/prng.ts
-export function mulberry32(seed: number): () => number;
 // src/server/store/seed/clients.generator.ts
 export const CLIENT_COUNT = 1200;
-export const CLIENT_SEED = 20261108;
-export function generateClients(count?: number, seed?: number): Client[];
+export const CLIENT_SEED = 'user-management-2026';
+export function generateClients(count?: number, seed?: string): Client[];
 // src/server/store/seed/users.seed.ts
 export function seedUsers(): User[];
 ```
@@ -199,7 +197,7 @@ describe('generateClients', () => {
 ```
 
 - [ ] **Step 2: Run it**: `npx vitest run test/unit/store/clients.generator.test.ts` → FAIL (module not found).
-- [ ] **Step 3: Implement `mulberry32` and `generateClients`**. Ids `c-0001`…`c-1200` before sorting. Name pools: ≥20 first names, ≥20 last names, ≥15 company suffixes/words, ≥12 countries, all inline consts. Email `${first}.${last}@${companySlug}.example`. `createdAt` = ISO string of `now - rnd * 3 years` using a fixed `now` passed as `Date.now()` at call time. Status churned when `rnd() < 0.3`.
+- [ ] **Step 3: Implement `generateClients`** with `seedrandom` (dependency approved by Viktor 2026-11-09). Ids `c-0001`…`c-1200` before sorting. Name pools: ≥20 first names, ≥20 last names, ≥15 company suffixes/words, ≥12 countries, all inline consts. Email `${first}.${last}@${companySlug}.example`. `createdAt` = ISO string of `now - rnd * 3 years` using `now` anchored to the start of the current UTC day so two calls are identical. Status churned when `rnd() < 0.3`.
 - [ ] **Step 4: Run it** → PASS.
 - [ ] **Step 5: Write the failing seed test** `test/unit/store/users.seed.test.ts`
 

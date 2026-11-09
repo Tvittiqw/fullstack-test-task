@@ -51,7 +51,7 @@ Secondary goal: the repo must read like a codebase a stranger's agent can extend
 | Tests | `vitest` | Runs route handlers as plain functions, no server, fast; `next/jest` fights ESM server modules |
 | Lint/format | ESLint flat config (`eslint-config-next` + `typescript-eslint` type-checked) + Prettier (`singleQuote`, `trailingComma: all`) | Type-aware lint catches unsafe access in the permission layer |
 | IDs | `crypto.randomUUID()` | No dependency |
-| PRNG for seed | `mulberry32` in-repo (10 lines) | Deterministic clients without a dependency |
+| PRNG for seed | `seedrandom` | Deterministic clients; the standard seeded PRNG package (Viktor 2026-11-09, replaced an in-repo mulberry32) |
 
 Lint rules on top of the scaffold defaults: `@typescript-eslint/no-explicit-any: error`, `@typescript-eslint/ban-ts-comment: error`. tsconfig keeps `strict: true` from the scaffold plus `noUnusedLocals`, `noUncheckedIndexedAccess`.
 
@@ -77,7 +77,7 @@ fullstack-test-task/
     shared/                               const arrays and types only, imports nothing
       roles.ts  permissions.ts  api-types.ts  (PublicUser, Client, Me, Paginated<T>, ErrorEnvelope)
     server/                               server-only; never imported from src/ui or client components
-      store/      store.ts  seed/users.seed.ts  seed/clients.generator.ts  seed/prng.ts
+      store/      store.ts  types.ts  seed/users.seed.ts  seed/clients.generator.ts
       access/     policy.ts  authorize.ts
       auth/       sessions.ts  require-session.ts  require-permission.ts  credentials.ts
       users/      users.service.ts  users.repository.ts  users.schema.ts
