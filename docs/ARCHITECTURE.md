@@ -20,12 +20,12 @@ src/
     store/      store.ts, seed/   globalThis-cached store, deterministic seed
     access/     policy.ts, authorize.ts, user-change.ts
     auth/       sessions.ts, credentials.ts, require-session.ts, require-permission.ts
-    users/      users.schema.ts, users.repository.ts, users.service.ts
+    users/      users.repository.ts, users.service.ts
     clients/    clients.schema.ts, clients.repository.ts, clients.service.ts
     http/       errors.ts, respond.ts, handle.ts
     page-auth.ts                  session and permission checks for server components
     page-load.ts                  loadOrNotFound: service 404 → notFound() for pages
-  ui/           api-client.ts, format.ts, hooks/, primitives/, layout/, auth/, clients/, users/
+  ui/           api-client.ts, query-client.tsx, query-keys.ts, format.ts, paging.ts, primitives/, layout/, auth/, clients/, users/
 test/
   unit/         store, access, http, users, clients
   api/          auth, users, clients, scenarios

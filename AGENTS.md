@@ -19,11 +19,11 @@ npm run typecheck                  # tsc --noEmit
 
 ## Layout
 
-- `src/shared/` const arrays and types only (`ROLES`, `PERMISSIONS`, API types). Imports nothing from the project.
+- `src/shared/` const arrays, types and zod schemas (`ROLES`, `PERMISSIONS`, API types, `schemas/`). Imports nothing from the project. A schema is the single validation definition: the server parses with it in `parseBody`, the browser resolves forms with it through `zodResolver`.
 - `src/server/` everything that runs on the server: `store/`, `access/`, `auth/`, `users/`, `clients/`, `http/`. Imports only `src/server` and `src/shared`.
 - `src/app/api/**` route handlers. Import `src/server` only. No logic beyond authorize → parse → service → respond, so 401/403 always come before 400.
 - `src/app/**/page.tsx` server components. May import `src/server` for reads and auth.
-- `src/ui/` client-safe code. `api-client.ts`, `format.ts`, `hooks/`, `primitives/` (Badge, DetailsList, PageHeader, Pagination, TableSkeleton, ErrorMessage), `layout/` (Nav, SidebarUser, Forbidden) and one folder per feature (`auth/`, `clients/`, `users/`). One component per file, named exports, no barrel files. Imports `src/shared` only, never `src/server`.
+- `src/ui/` client-safe code. `api-client.ts`, `query-client.tsx` (TanStack Query provider), `query-keys.ts`, `format.ts`, `paging.ts`, `primitives/` (Badge, Button, DetailsList, Field, TextField, SelectField, PageHeader, Pagination, TableSkeleton, ErrorMessage), `layout/` (Nav, SidebarUser, Forbidden) and one folder per feature (`auth/`, `clients/`, `users/`). Each feature folder holds `<feature>-api.ts` (typed calls) and `<feature>-queries.ts` (`useQuery` / `useMutation` hooks keyed by `queryKeys`, invalidating on success); components import the hooks, never `apiFetch` or `useQuery` directly. Forms use `react-hook-form` with the shared schema. One component per file, named exports, no barrel files. Imports `src/shared` only, never `src/server`.
 - `'use client'` files import only `src/ui` and `src/shared`.
 - `test/` mirrors `src/server`: `unit/`, `api/`, `helpers/`.
 
@@ -42,7 +42,7 @@ npm run typecheck                  # tsc --noEmit
 - A manager cannot edit themself (they are not their own report). A manager's scope reaches only plain users: a manager or IT account with `managerId` pointing at them is still out of scope, and `POST /api/users` refuses a `managerId` for any role with a user scope.
 - Deactivation is checked on every request, not at login: `requireSession` reloads the user each time.
 - `src/proxy.ts` only checks that the `session` cookie exists. It never validates it.
-- 403 is a rendered page, not a redirect. Only 401 redirects to `/login`.
+- 403 is a rendered page, not a redirect. Only 401 `unauthenticated` redirects to `/login`; the login form's own 401 `invalid_credentials` stays on the form.
 - The store is cached on `globalThis` so Next dev HMR does not wipe sessions.
 - Passwords are plain text by task requirement.
 - In `authorizeUserChange` the order is scope → last-active-in-role → self-change. The last two are load-bearing: scenario 5 needs two different denial reasons. The never-zero-active rule applies to every role whose policy has `keepOneActive: true` (today only IT), not to a role name.

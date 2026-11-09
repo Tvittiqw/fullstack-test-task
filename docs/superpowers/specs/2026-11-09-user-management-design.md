@@ -51,6 +51,8 @@ Secondary goal: the repo must read like a codebase a stranger's agent can extend
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Framework     | Next.js 16 App Router, `create-next-app` with TypeScript, ESLint, `src/` dir, no Tailwind                                     | What the task asks for; Tailwind adds noise for ungraded styling                                            |
 | Validation    | `zod`                                                                                                                         | Smallest common choice; schemas double as request DTOs                                                      |
+| Forms         | `react-hook-form` + `@hookform/resolvers/zod`                                                                                 | One schema validates on both sides; schemas moved to `src/shared/schemas/` (Viktor 2026-11-09)              |
+| Client data   | `@tanstack/react-query`                                                                                                       | Keyed queries, mutation state, invalidation after writes (Viktor 2026-11-09)                                |
 | Tests         | `vitest`                                                                                                                      | Runs route handlers as plain functions, no server, fast; `next/jest` fights ESM server modules              |
 | Lint/format   | ESLint flat config (`eslint-config-next` + `typescript-eslint` type-checked) + Prettier (`singleQuote`, `trailingComma: all`) | Type-aware lint catches unsafe access in the permission layer                                               |
 | IDs           | `crypto.randomUUID()`                                                                                                         | No dependency                                                                                               |
@@ -77,20 +79,21 @@ fullstack-test-task/
       api/users/route.ts  api/users/managers/route.ts  api/users/[id]/route.ts
       api/users/[id]/role/route.ts  api/users/[id]/status/route.ts
       api/clients/route.ts  api/clients/[id]/route.ts
-    shared/                               const arrays and types only, imports nothing
+    shared/                               const arrays, types and zod request schemas, imports nothing
       roles.ts  permissions.ts  api-types.ts  (PublicUser, Client, Me, Paginated<T>, ErrorEnvelope)
+      schemas/users.ts  schemas/auth.ts     zod schemas shared by parseBody and zodResolver
     server/                               server-only; never imported from src/ui or client components
       store/      store.ts  types.ts  seed/users.seed.ts  seed/clients.generator.ts
       access/     policy.ts  authorize.ts  user-change.ts
       auth/       sessions.ts  require-session.ts  require-permission.ts  credentials.ts
-      users/      users.service.ts  users.repository.ts  users.schema.ts
+      users/      users.service.ts  users.repository.ts
       clients/    clients.service.ts  clients.repository.ts  clients.schema.ts
       http/       errors.ts  respond.ts  handle.ts
       page-auth.ts                        requireSession/requirePermission variants for pages
       page-load.ts                        loadOrNotFound: maps a service 404 to notFound()
     ui/                                   client-safe only
-      api-client.ts                       fetch wrapper: credentials, 401 → /login, error envelope
-      format.ts  hooks/useApiQuery.ts
+      api-client.ts                       fetch wrapper: credentials, 401 unauthenticated → /login, error envelope
+      query-client.tsx  query-keys.ts  format.ts  paging.ts
       primitives/  Badge  DetailsList  PageHeader  Pagination  TableSkeleton  ErrorMessage
       layout/      Nav  SidebarUser  Forbidden
       auth/  clients/  users/              one folder per feature
@@ -105,7 +108,7 @@ fullstack-test-task/
 
 Import boundaries (enforced by review, stated in docs and agent files):
 
-- `src/shared/**` imports nothing from the project. It holds `ROLES`, `PERMISSIONS` and response types, and is the only place either side may import role values from.
+- `src/shared/**` imports nothing from the project. It holds `ROLES`, `PERMISSIONS`, response types and the zod request schemas, and is the only place either side may import role values from.
 - `src/server/**` imports only from `src/server/**` and `src/shared/**`. Never from `src/app` or `src/ui`.
 - `src/app/api/**` route handlers import `src/server/**` only. No logic in them beyond authorize → parse → service → respond.
 - `src/app/**/page.tsx` (server components) may import `src/server/**` for reads and auth. Client components (`'use client'`) import only `src/ui/**`.
@@ -227,7 +230,7 @@ export const ROLE_POLICY: Record<Role, RolePolicy> = {
 };
 ```
 
-`Record<Role, …>` makes a fourth role a compile error until its policy row exists. Nothing else in the codebase branches on `Role` values. Other consumers of `ROLES` are zod's `z.enum(ROLES)` in `users.schema.ts`, the role `<select>` in the UI, and the seed. "Can manage other users" is derived from the policy (`userScope === 'reports'`), never from `role === 'manager'`: `usersService.managerCandidates()` returns active users whose role has that scope, and `POST /api/users` validates `managerId` against the same set.
+`Record<Role, …>` makes a fourth role a compile error until its policy row exists. Nothing else in the codebase branches on `Role` values. Other consumers of `ROLES` are zod's `z.enum(ROLES)` in `src/shared/schemas/users.ts`, the role `<select>` in the UI, and the seed. "Can manage other users" is derived from the policy (`userScope === 'reports'`), never from `role === 'manager'`: `usersService.managerCandidates()` returns active users whose role has that scope, and `POST /api/users` validates `managerId` against the same set.
 
 ### Decision function
 
@@ -295,7 +298,7 @@ Envelope: success returns the resource JSON directly; errors return `{ error: { 
 | Method & path                 | Permission                                   | Body / query                                      | Response                                                                                                            |
 | ----------------------------- | -------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `POST /api/auth/login`        | public                                       | `{ email, password }`                             | 200 `Me` / 401                                                                                                      |
-| `POST /api/auth/logout`       | session                                      | —                                                 | 204                                                                                                                 |
+| `POST /api/auth/logout`       | public                                       | —                                                 | 204                                                                                                                 |
 | `GET /api/auth/me`            | session                                      | —                                                 | 200 `Me`                                                                                                            |
 | `GET /api/users`              | `users.list`                                 | —                                                 | 200 `{ items: PublicUser[] }` scoped by `visibleUsers`                                                              |
 | `GET /api/users/managers`     | `users.create`                               | —                                                 | 200 `{ items: PublicUser[] }` active users whose role policy has `userScope: 'reports'`; feeds the manager dropdown |
@@ -324,7 +327,7 @@ Role / status endpoints are separate from profile edit on purpose: one permissio
 
 `Nav.tsx` is a fixed left sidebar (dark theme, one green accent, per the client's visual language; wireframes and design system approved 2026-11-09). It receives `Me` and shows links only for permitted areas, the user's name with a role badge, and a Logout button. Under 720px it becomes a top bar. Hiding links is UX; it is not a check. The stylesheet comes from the design system and replaces `src/app/globals.css`.
 
-Client-side `api-client.ts`: `credentials: 'same-origin'`, parses the envelope, on 401 performs `window.location.assign('/login?expired=1')`. That is scenario 6: Olena's next page click returns 401 and she lands on `/login`.
+Client-side `api-client.ts`: `credentials: 'same-origin'`, parses the envelope, on 401 `unauthenticated` performs a full navigation to `/login?expired=1` (401 `invalid_credentials` from the login form stays on the form). That is scenario 6: Olena's next page click returns 401 and she lands on `/login`.
 
 ## 11. Testing
 

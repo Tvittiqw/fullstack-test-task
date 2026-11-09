@@ -763,7 +763,7 @@ git commit -m "feat: content pages - clients table, client detail, me"
 
 **Files:**
 
-- Create: `src/app/manage-users/page.tsx`, `src/ui/users/UsersTable.tsx`, `src/ui/users/UserRow.tsx`, `src/ui/users/CreateUserForm.tsx`
+- Create: `src/app/manage-users/page.tsx`, `src/ui/users/{UsersTable,UserRow,ProfileEditor,RoleSelect,StatusButton,CreateUserForm}.tsx`, `src/ui/users/{abilities,users-api,useUserMutation}.ts`, `src/ui/query-client.tsx`, `src/ui/query-keys.ts`, `src/ui/primitives/Field.tsx`, `src/shared/schemas/{users,auth}.ts`
 
 **Interfaces:**
 

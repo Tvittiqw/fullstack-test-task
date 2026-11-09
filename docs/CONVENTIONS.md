@@ -2,7 +2,7 @@
 
 ## Schemas
 
-- A zod schema is the DTO. Infer the type from it, never declare both.
+- A zod schema is the DTO. Infer the type from it, never declare both. Request schemas live in `src/shared/schemas/` so the same definition validates on the server (`parseBody`) and in the browser (`zodResolver`); query-string schemas that only the server needs stay next to their service.
 - Enums come from the shared const arrays: `z.enum(ROLES)`, `z.enum(USER_STATUSES)`.
 - Request bodies are parsed with `parseBody(request, schema)`, queries with `parseQuery(request, schema)`. A non-JSON body is 415, malformed JSON is 400 `invalid_json`, schema errors are 400 `validation`.
 
@@ -20,9 +20,11 @@
 
 ## Naming
 
-- Domain files: `<domain>.schema.ts`, `<domain>.repository.ts`, `<domain>.service.ts`.
+- Domain files: `<domain>.repository.ts`, `<domain>.service.ts`; shared request schemas in `src/shared/schemas/<domain>.ts`.
 - Route handlers export `GET`, `POST`, `PATCH` from `route.ts`.
 - Client components live under `src/ui/`: shared pieces in `primitives/` and `layout/`, feature pieces in a folder per feature. One component per file, named export, props typed as `type XProps`. They import only `src/ui` and `src/shared`.
+- Server data in client components goes through TanStack Query. Each feature folder has `<feature>-api.ts` (typed `apiFetch` calls, pure mappers such as `toCreateUserBody`) and `<feature>-queries.ts` (`useQuery` / `useMutation` hooks keyed by `query-keys.ts`; mutations invalidate the affected key on success). Components import the hooks, never `apiFetch` or `useQuery` directly. No hand-rolled fetch effects.
+- Forms use `react-hook-form` with `zodResolver(schema)` from `src/shared/schemas/`; fields are `TextField` / `SelectField` (label, error line, `aria-invalid`) that take the `register` props by spread; server errors render through `ErrorMessage`.
 
 ## General
 
