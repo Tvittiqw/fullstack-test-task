@@ -40,7 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-docs/superpowers/
 .superpowers/
 .idea/
 .DS_Store
