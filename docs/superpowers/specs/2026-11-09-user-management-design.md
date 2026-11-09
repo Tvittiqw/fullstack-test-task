@@ -78,7 +78,7 @@ fullstack-test-task/
       roles.ts  permissions.ts  api-types.ts  (PublicUser, Client, Me, Paginated<T>, ErrorEnvelope)
     server/                               server-only; never imported from src/ui or client components
       store/      store.ts  types.ts  seed/users.seed.ts  seed/clients.generator.ts
-      access/     policy.ts  authorize.ts
+      access/     policy.ts  authorize.ts  user-change.ts
       auth/       sessions.ts  require-session.ts  require-permission.ts  credentials.ts
       users/      users.service.ts  users.repository.ts  users.schema.ts
       clients/    clients.service.ts  clients.repository.ts  clients.schema.ts
@@ -165,7 +165,7 @@ export const ROLE_POLICY: Record<Role, RolePolicy> = {
 
 ### Decision function
 
-`src/server/access/authorize.ts` exports:
+`src/server/access/authorize.ts` exports `can`, `canOnUser`, `visibleUsers`; `src/server/access/user-change.ts` exports the rest (split 2026-11-09 so the invariant logic is a file of its own; denial triples live in a `DENIALS` record there):
 
 ```ts
 type Actor = PublicUser;
@@ -196,7 +196,7 @@ HTTP mapping of a `Denial`: `forbidden` → 403, `conflict` → 409. Order matte
 ### Where permission decisions are made (README list)
 
 1. `src/server/access/policy.ts` — the matrix.
-2. `src/server/access/authorize.ts` — scope and invariant rules.
+2. `src/server/access/authorize.ts` — scope rules; `src/server/access/user-change.ts` — invariant rules.
 3. `src/server/auth/require-session.ts` — authentication and active-status check.
 4. `src/server/auth/require-permission.ts` — the one wrapper route handlers call; it composes 3 + `can`.
 5. `src/server/page-auth.ts` — same composition for pages, producing redirect / Forbidden instead of HTTP codes.

@@ -10,7 +10,7 @@
 
 - Throw `HttpError(status, code, message, details?)` from `src/server/http/errors.ts`.
 - Every route handler is wrapped in `handle()`. The response envelope is always `{ error: { code, message, details? } }`.
-- Denials from `access/` are mapped by `fromDenial` in `require-permission.ts`; do not map them by hand.
+- Denials from `access/user-change.ts` are mapped by `fromDenial` in `require-permission.ts`; do not map them by hand. New denial reasons are rows of `DENIALS`.
 
 ## Types
 

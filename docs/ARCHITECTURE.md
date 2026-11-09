@@ -18,7 +18,7 @@ src/
   shared/                         ROLES, PERMISSIONS, API types; imports nothing
   server/
     store/      store.ts, seed/   globalThis-cached store, deterministic seed
-    access/     policy.ts, authorize.ts
+    access/     policy.ts, authorize.ts, user-change.ts
     auth/       sessions.ts, credentials.ts, require-session.ts, require-permission.ts
     users/      users.schema.ts, users.repository.ts, users.service.ts
     clients/    clients.schema.ts, clients.repository.ts, clients.service.ts
@@ -36,8 +36,8 @@ Import direction: `shared` ← `server` ← `app`. `ui` sees only `shared`.
 ## Access module
 
 - `policy.ts`: `ROLE_POLICY: Record<Role, RolePolicy>`. Each row has `permissions`, `userScope` (`'all' | 'reports' | null`) and `landingRoute`. A new role without a row does not compile.
-- `authorize.ts`: `can(actor, permission)`, `canOnUser(actor, permission, target)`, `visibleUsers(actor, all)`, `authorizeUserChange(actor, target, change, store)`.
-- `authorizeUserChange` returns `{ ok: true }` or `{ ok: false, denial }`. Denial kinds: `conflict` (409) and `forbidden` (403). Codes: `last_active_it`, `self_change`, `out_of_scope`.
+- `authorize.ts`: permission and scope lookups, `can(actor, permission)`, `canOnUser(actor, permission, target)`, `visibleUsers(actor, all)`.
+- `user-change.ts`: the invariants on role and status changes, `authorizeUserChange(actor, target, change, users)`. Returns `{ ok: true }` or `{ ok: false, denial }`. Each denial is a row of `DENIALS`: `lastActiveIt` (kind `conflict`, 409) and `selfChange` (kind `forbidden`, 403).
 - Evaluation order inside a mutating request: session 401 → permission 403 → body 400 → target 404 → `last_active_it` 409 → `self_change` 403 → write.
 
 ## Sessions

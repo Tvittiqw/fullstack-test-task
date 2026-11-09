@@ -238,8 +238,8 @@ git commit -m "feat: in-memory store with seeded users and generated clients"
 ### Task 4: Access policy and authorize rules
 
 **Files:**
-- Create: `src/server/access/policy.ts`, `src/server/access/authorize.ts`
-- Test: `test/unit/access/policy.test.ts`, `test/unit/access/authorize.test.ts`, `test/helpers/users.ts`
+- Create: `src/server/access/policy.ts`, `src/server/access/authorize.ts`, `src/server/access/user-change.ts`
+- Test: `test/unit/access/policy.test.ts`, `test/unit/access/authorize.test.ts`, `test/unit/access/user-change.test.ts`, `test/helpers/users.ts`
 
 **Interfaces:**
 - Consumes: `Role`, `Permission`, `PublicUser`, `UserStatus` from Task 3.
@@ -253,12 +253,14 @@ export function policyFor(role: Role): RolePolicy;
 export function permissionsOf(role: Role): Permission[];
 export function canManageReports(role: Role): boolean;          // userScope === 'reports'
 // src/server/access/authorize.ts
-export type Denial = { kind: 'forbidden' | 'conflict'; code: 'self_change' | 'last_active_it'; message: string };
-export type Decision = { ok: true } | { ok: false; denial: Denial };
-export type UserChange = { role: Role } | { status: UserStatus };
 export function can(actor: PublicUser, permission: Permission): boolean;
 export function canOnUser(actor: PublicUser, permission: Permission, target: PublicUser): boolean;
 export function visibleUsers(actor: PublicUser, all: PublicUser[]): PublicUser[];
+// src/server/access/user-change.ts (split from authorize.ts, Viktor 2026-11-09)
+export type Denial = { kind: 'forbidden' | 'conflict'; code: string; message: string };
+export type Decision = { ok: true } | { ok: false; denial: Denial };
+export type UserChange = { role: Role } | { status: UserStatus };
+export const DENIALS: { lastActiveIt: Denial; selfChange: Denial };
 export function authorizeUserChange(actor: PublicUser, target: PublicUser, change: UserChange, users: Iterable<PublicUser>): Decision;
 // test/helpers/users.ts
 export function user(overrides: Partial<PublicUser> & { role: Role }): PublicUser;   // fills id, email, status 'active', managerId null
@@ -300,7 +302,7 @@ describe('authorizeUserChange', () => {
 ```
 
 - [ ] **Step 6: Run** → FAIL.
-- [ ] **Step 7: Implement `authorize.ts`**. Rule 4 without a role literal: the invariant is "never remove the last active holder of a role that can change status". Implement `removesLastActiveAdmin(target, change, users): boolean` = target is active, `can(target, 'users.changeStatus')`, the change is `status: 'deactivated'` or a `role` different from `target.role`, and no *other* active user has `target.role`. For today's roles this is exactly "last active IT"; a fourth admin-like role is protected automatically. `authorizeUserChange` evaluates this first (→ `conflict`, `last_active_it`), then `target.id === actor.id` with a deactivating or role-changing change (→ `forbidden`, `self_change`), else `{ ok: true }`.
+- [ ] **Step 7: Implement `authorize.ts` (lookups) and `user-change.ts` (invariants)**. Rule 4 without a role literal: the invariant is "never remove the last active holder of a role that can change status". Implement `removesLastActiveAdmin(target, change, users): boolean` = target is active, `can(target, 'users.changeStatus')`, the change is `status: 'deactivated'` or a `role` different from `target.role`, and no *other* active user has `target.role`. For today's roles this is exactly "last active IT"; a fourth admin-like role is protected automatically. `authorizeUserChange` evaluates this first (→ `conflict`, `last_active_it`), then `target.id === actor.id` with a deactivating or role-changing change (→ `forbidden`, `self_change`), else `{ ok: true }`.
 - [ ] **Step 8: Run** → PASS. Then `npm test && npm run lint && npm run typecheck`.
 - [ ] **Step 9: Commit**
 
