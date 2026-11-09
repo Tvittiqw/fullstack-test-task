@@ -1,16 +1,14 @@
 'use client';
 
 import type { PublicUser } from '@/shared/api-types';
-import { apiFetch, hardNavigate } from '@/ui/api-client';
+import { useLogout } from '@/ui/auth/auth-queries';
 import { Badge } from '@/ui/primitives/Badge';
+import { Button } from '@/ui/primitives/Button';
 
 type SidebarUserProps = { user: PublicUser };
 
 export function SidebarUser({ user }: SidebarUserProps) {
-  async function logout() {
-    await apiFetch<void>('/api/auth/logout', { method: 'POST' });
-    hardNavigate('/login');
-  }
+  const logout = useLogout();
 
   return (
     <div className="sidebar__user">
@@ -18,13 +16,13 @@ export function SidebarUser({ user }: SidebarUserProps) {
         <div className="sidebar__name">{user.fullName}</div>
         <Badge kind="role" value={user.role} />
       </div>
-      <button
-        type="button"
-        className="btn btn--secondary btn--sm"
-        onClick={() => void logout()}
+      <Button
+        size="sm"
+        onClick={() => logout.mutate()}
+        pending={logout.isPending}
       >
         Log out
-      </button>
+      </Button>
     </div>
   );
 }

@@ -1,13 +1,13 @@
 'use client';
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import type { Client, Paginated } from '@/shared/api-types';
-import { useApiQuery } from '@/ui/hooks/useApiQuery';
-import { PAGE_LIMIT, parsePage } from '@/ui/paging';
+import { errorText } from '@/ui/api-client';
+import { parsePage } from '@/ui/paging';
 import { ErrorMessage } from '@/ui/primitives/ErrorMessage';
 import { Pagination } from '@/ui/primitives/Pagination';
 import { TableSkeleton } from '@/ui/primitives/TableSkeleton';
 import { ClientRow } from './ClientRow';
+import { useClientsPage } from './clients-queries';
 
 const COLUMNS = ['Name', 'Company', 'Email', 'Country', 'Status', 'Created'];
 
@@ -18,14 +18,12 @@ export function ClientsTable({ initialPage }: ClientsTableProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const page = parsePage(searchParams.get('page') ?? initialPage);
-  const { data, error, loading } = useApiQuery<Paginated<Client>>(
-    `/api/clients?page=${page}&limit=${PAGE_LIMIT}`,
-  );
+  const { data, error, isPending } = useClientsPage(page);
 
   const rows = data?.items.map((client) => (
     <ClientRow key={client.id} client={client} />
   ));
-  const empty = data !== null && data.items.length === 0;
+  const empty = data !== undefined && data.items.length === 0;
 
   function goTo(next: number) {
     router.push(`${pathname}?page=${next}`);
@@ -43,12 +41,12 @@ export function ClientsTable({ initialPage }: ClientsTableProps) {
             </tr>
           </thead>
           <tbody>
-            {loading && <TableSkeleton columns={COLUMNS.length} />}
+            {isPending && <TableSkeleton columns={COLUMNS.length} />}
             {rows}
           </tbody>
         </table>
         {empty && <p className="empty">No clients on this page.</p>}
-        <ErrorMessage error={error} block />
+        <ErrorMessage error={error ? errorText(error) : null} block />
       </div>
       {data && (
         <Pagination
