@@ -10,12 +10,12 @@ Vitest, `environment: node`. No dev server, no browser.
 
 ## What to test
 
-| Layer | Type | How |
-|-------|------|-----|
-| `access/` | Unit | Call `can`, `canOnUser`, `visibleUsers`, `authorizeUserChange` with plain `PublicUser` objects from `test/helpers/users.ts`; assert denials against `DENIALS` |
-| Services | Unit | Real store, `resetStore()` in `beforeEach`; no mocks |
-| Route handlers | API | Import the exported `GET`/`POST`/`PATCH`, call with `new Request(...)` and `{ params: Promise.resolve({ id }) }` |
-| Pages, components | None | Not graded, not tested |
+| Layer             | Type | How                                                                                                                                                           |
+| ----------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `access/`         | Unit | Call `can`, `canOnUser`, `visibleUsers`, `authorizeUserChange` with plain `PublicUser` objects from `test/helpers/users.ts`; assert denials against `DENIALS` |
+| Services          | Unit | Real store, `resetStore()` in `beforeEach`; no mocks                                                                                                          |
+| Route handlers    | API  | Import the exported `GET`/`POST`/`PATCH`, call with `new Request(...)` and `{ params: Promise.resolve({ id }) }`                                              |
+| Pages, components | None | Not graded, not tested                                                                                                                                        |
 
 ## Helpers (`test/helpers/`)
 
