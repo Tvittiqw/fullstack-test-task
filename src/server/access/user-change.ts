@@ -26,9 +26,9 @@ export const DENIALS = {
 } as const satisfies Record<string, Denial>;
 
 function removesTarget(target: PublicUser, change: UserChange): boolean {
-  return 'status' in change
-    ? change.status === 'deactivated'
-    : change.role !== target.role;
+  if ('status' in change) return change.status === 'deactivated';
+  if ('role' in change) return change.role !== target.role;
+  return change satisfies never;
 }
 
 function removesLastActiveAdmin(
