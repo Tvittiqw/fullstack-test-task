@@ -22,7 +22,7 @@
 
 - Domain files: `<domain>.schema.ts`, `<domain>.repository.ts`, `<domain>.service.ts`.
 - Route handlers export `GET`, `POST`, `PATCH` from `route.ts`.
-- Client components live in `src/ui/components/` and import only `src/ui` and `src/shared`.
+- Client components live under `src/ui/`: shared pieces in `primitives/` and `layout/`, feature pieces in a folder per feature. One component per file, named export, props typed as `type XProps`. They import only `src/ui` and `src/shared`.
 
 ## General
 

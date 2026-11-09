@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { toMe } from '@/server/auth/me';
 import { currentUser } from '@/server/page-auth';
-import { Nav } from '@/ui/components/Nav';
+import { Nav } from '@/ui/layout/Nav';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -9,11 +9,9 @@ export const metadata: Metadata = {
   description: 'Users directory and client content',
 };
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+type RootLayoutProps = { children: React.ReactNode };
+
+export default async function RootLayout({ children }: RootLayoutProps) {
   const user = await currentUser();
   return (
     <html lang="en">

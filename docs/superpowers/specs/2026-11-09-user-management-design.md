@@ -4,13 +4,14 @@ Date: 2026-11-09. Source: `Fullstack_test_task.docx` (4-hour ceiling, graded on 
 
 ## 1. Intent
 
-A single Next.js app with three fixed roles, an in-memory store, a paginated client directory and a users management view. The graded part is *who may do what and where it is enforced*. Every permission decision runs on the server, in one module, and the HTTP API enforces it without trusting the UI.
+A single Next.js app with three fixed roles, an in-memory store, a paginated client directory and a users management view. The graded part is _who may do what and where it is enforced_. Every permission decision runs on the server, in one module, and the HTTP API enforces it without trusting the UI.
 
 Secondary goal: the repo must read like a codebase a stranger's agent can extend (add a fourth role) without breaking any rule. That is what `AGENTS.md` / `CLAUDE.md` / `docs/*` are for.
 
 ## 2. Goals, non-goals, anti-goals
 
 **Goals**
+
 - All six "rules that must hold" enforced in route handlers, testable with curl.
 - Six walkthrough scenarios pass through both the UI and the API.
 - Clients paginated server-side; the browser never receives more than one page.
@@ -19,6 +20,7 @@ Secondary goal: the repo must read like a codebase a stranger's agent can extend
 - Granular commit history that shows the order of work.
 
 **Non-goals (four-hour budget)**
+
 - Styling beyond readable defaults. No UI library.
 - Password hashing (explicitly not wanted).
 - Persistence. Data resets on restart by design.
@@ -26,6 +28,7 @@ Secondary goal: the repo must read like a codebase a stranger's agent can extend
 - Sorting/filtering, audit trail, Docker: only after the core passes, in that order.
 
 **Anti-goals (failure even if it "works")**
+
 - A permission check that exists only in the UI.
 - A role string literal anywhere outside `src/shared/roles.ts` and the seed.
 - `any` or `@ts-ignore` in `src/server/**`.
@@ -44,14 +47,14 @@ Secondary goal: the repo must read like a codebase a stranger's agent can extend
 
 ## 4. Stack and tooling (decided)
 
-| Concern | Choice | Why |
-|---|---|---|
-| Framework | Next.js 16 App Router, `create-next-app` with TypeScript, ESLint, `src/` dir, no Tailwind | What the task asks for; Tailwind adds noise for ungraded styling |
-| Validation | `zod` | Smallest common choice; schemas double as request DTOs |
-| Tests | `vitest` | Runs route handlers as plain functions, no server, fast; `next/jest` fights ESM server modules |
-| Lint/format | ESLint flat config (`eslint-config-next` + `typescript-eslint` type-checked) + Prettier (`singleQuote`, `trailingComma: all`) | Type-aware lint catches unsafe access in the permission layer |
-| IDs | `crypto.randomUUID()` | No dependency |
-| PRNG for seed | `seedrandom` | Deterministic clients; the standard seeded PRNG package (Viktor 2026-11-09, replaced an in-repo mulberry32) |
+| Concern       | Choice                                                                                                                        | Why                                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Framework     | Next.js 16 App Router, `create-next-app` with TypeScript, ESLint, `src/` dir, no Tailwind                                     | What the task asks for; Tailwind adds noise for ungraded styling                                            |
+| Validation    | `zod`                                                                                                                         | Smallest common choice; schemas double as request DTOs                                                      |
+| Tests         | `vitest`                                                                                                                      | Runs route handlers as plain functions, no server, fast; `next/jest` fights ESM server modules              |
+| Lint/format   | ESLint flat config (`eslint-config-next` + `typescript-eslint` type-checked) + Prettier (`singleQuote`, `trailingComma: all`) | Type-aware lint catches unsafe access in the permission layer                                               |
+| IDs           | `crypto.randomUUID()`                                                                                                         | No dependency                                                                                               |
+| PRNG for seed | `seedrandom`                                                                                                                  | Deterministic clients; the standard seeded PRNG package (Viktor 2026-11-09, replaced an in-repo mulberry32) |
 
 Lint rules on top of the scaffold defaults: `@typescript-eslint/no-explicit-any: error`, `@typescript-eslint/ban-ts-comment: error`. tsconfig keeps `strict: true` from the scaffold plus `noUnusedLocals`, `noUncheckedIndexedAccess`.
 
@@ -84,9 +87,13 @@ fullstack-test-task/
       clients/    clients.service.ts  clients.repository.ts  clients.schema.ts
       http/       errors.ts  respond.ts  handle.ts
       page-auth.ts                        requireSession/requirePermission variants for pages
+      page-load.ts                        loadOrNotFound: maps a service 404 to notFound()
     ui/                                   client-safe only
       api-client.ts                       fetch wrapper: credentials, 401 → /login, error envelope
-      components/  Nav.tsx  Forbidden.tsx  Pagination.tsx  ErrorMessage.tsx
+      format.ts  hooks/useApiQuery.ts
+      primitives/  Badge  DetailsList  PageHeader  Pagination  TableSkeleton  ErrorMessage
+      layout/      Nav  SidebarUser  Forbidden
+      auth/  clients/  users/              one folder per feature
   test/
     unit/access/authorize.test.ts
     unit/users/users.service.test.ts
@@ -97,21 +104,43 @@ fullstack-test-task/
 ```
 
 Import boundaries (enforced by review, stated in docs and agent files):
+
 - `src/shared/**` imports nothing from the project. It holds `ROLES`, `PERMISSIONS` and response types, and is the only place either side may import role values from.
 - `src/server/**` imports only from `src/server/**` and `src/shared/**`. Never from `src/app` or `src/ui`.
 - `src/app/api/**` route handlers import `src/server/**` only. No logic in them beyond authorize → parse → service → respond.
 - `src/app/**/page.tsx` (server components) may import `src/server/**` for reads and auth. Client components (`'use client'`) import only `src/ui/**`.
-- `src/ui/**` imports `src/shared/**` for types and the `ROLES` list (role `<select>` options) and never `src/server/**`. The browser learns what it *may do* only through the `permissions` list returned by `/api/auth/me`; `ROLES` is display data, not a decision.
+- `src/ui/**` imports `src/shared/**` for types and the `ROLES` list (role `<select>` options) and never `src/server/**`. The browser learns what it _may do_ only through the `permissions` list returned by `/api/auth/me`; `ROLES` is display data, not a decision.
 
 ## 6. Data model and store
 
 ```ts
 type UserStatus = 'active' | 'deactivated';
-type User = { id: string; fullName: string; email: string; password: string; role: Role; status: UserStatus; managerId: string | null; createdAt: string };
+type User = {
+  id: string;
+  fullName: string;
+  email: string;
+  password: string;
+  role: Role;
+  status: UserStatus;
+  managerId: string | null;
+  createdAt: string;
+};
 type ClientStatus = 'active' | 'churned';
-type Client = { id: string; name: string; company: string; email: string; country: string; status: ClientStatus; createdAt: string };
+type Client = {
+  id: string;
+  name: string;
+  company: string;
+  email: string;
+  country: string;
+  status: ClientStatus;
+  createdAt: string;
+};
 type Session = { token: string; userId: string; createdAt: string };
-type Store = { users: Map<string, User>; clients: Client[]; sessions: Map<string, Session> };
+type Store = {
+  users: Map<string, User>;
+  clients: Client[];
+  sessions: Map<string, Session>;
+};
 ```
 
 - `store.ts` exposes `getStore()` and `resetStore()`. The store object is cached on `globalThis` so it survives Next dev hot reloads (otherwise sessions vanish on every file save). `resetStore()` rebuilds it from the seed; tests call it in `beforeEach`.
@@ -121,17 +150,17 @@ type Store = { users: Map<string, User>; clients: Client[]; sessions: Map<string
 
 ### Seeded users (all passwords plain, listed in README)
 
-| Name | Role | Status | Manager | Purpose |
-|---|---|---|---|---|
-| Ivan | IT | active | — | scenario 4, 5 |
-| Petro | IT | active | — | the other IT, rule 4 |
-| Anna | manager | active | — | four reports, scenarios 1–3 |
-| Oksana | manager | active | — | manager with no reports |
-| Maksym | manager | deactivated | — | deactivated manager |
-| Olena, Kateryna, Andrii, Mykola | user | active | Anna | Anna's four reports; Olena is scenario 6 |
-| Dmytro | user | active | Maksym | reports to a different (deactivated) manager |
-| Yurii | user | deactivated | — | already deactivated |
-| Nazar | user | active | — | unassigned, active |
+| Name                            | Role    | Status      | Manager | Purpose                                      |
+| ------------------------------- | ------- | ----------- | ------- | -------------------------------------------- |
+| Ivan                            | IT      | active      | —       | scenario 4, 5                                |
+| Petro                           | IT      | active      | —       | the other IT, rule 4                         |
+| Anna                            | manager | active      | —       | four reports, scenarios 1–3                  |
+| Oksana                          | manager | active      | —       | manager with no reports                      |
+| Maksym                          | manager | deactivated | —       | deactivated manager                          |
+| Olena, Kateryna, Andrii, Mykola | user    | active      | Anna    | Anna's four reports; Olena is scenario 6     |
+| Dmytro                          | user    | active      | Maksym  | reports to a different (deactivated) manager |
+| Yurii                           | user    | deactivated | —       | already deactivated                          |
+| Nazar                           | user    | active      | —       | unassigned, active                           |
 
 Emails are `<name>@example.com`, lower-case. Passwords are per-account, short and distinct (builder picks, README lists).
 
@@ -140,27 +169,64 @@ Emails are `<name>@example.com`, lower-case. Passwords are per-account, short an
 ### Single source of truth
 
 `src/shared/roles.ts`
+
 ```ts
 export const ROLES = ['IT', 'manager', 'user'] as const;
 export type Role = (typeof ROLES)[number];
 ```
 
 `src/shared/permissions.ts`
+
 ```ts
-export const PERMISSIONS = ['users.list', 'users.create', 'users.editProfile', 'users.changeRole', 'users.changeStatus', 'content.view'] as const;
+export const PERMISSIONS = [
+  'users.list',
+  'users.create',
+  'users.editProfile',
+  'users.changeRole',
+  'users.changeStatus',
+  'content.view',
+] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 ```
 
 `src/server/access/policy.ts`
+
 ```ts
 type UserScope = 'all' | 'reports';
-type RolePolicy = { permissions: ReadonlySet<Permission>; userScope: UserScope | null; keepOneActive: boolean; landingRoute: string };
+type RolePolicy = {
+  permissions: ReadonlySet<Permission>;
+  userScope: UserScope | null;
+  keepOneActive: boolean;
+  landingRoute: string;
+};
 export const ROLE_POLICY: Record<Role, RolePolicy> = {
-  IT:      { permissions: set('users.list','users.create','users.editProfile','users.changeRole','users.changeStatus'), userScope: 'all',     keepOneActive: true,  landingRoute: '/manage-users' },
-  manager: { permissions: set('users.list','users.editProfile','content.view'),                                         userScope: 'reports', keepOneActive: false, landingRoute: '/content' },
-  user:    { permissions: set('content.view'),                                                                          userScope: null,      keepOneActive: false, landingRoute: '/content' },
+  IT: {
+    permissions: set(
+      'users.list',
+      'users.create',
+      'users.editProfile',
+      'users.changeRole',
+      'users.changeStatus',
+    ),
+    userScope: 'all',
+    keepOneActive: true,
+    landingRoute: '/manage-users',
+  },
+  manager: {
+    permissions: set('users.list', 'users.editProfile', 'content.view'),
+    userScope: 'reports',
+    keepOneActive: false,
+    landingRoute: '/content',
+  },
+  user: {
+    permissions: set('content.view'),
+    userScope: null,
+    keepOneActive: false,
+    landingRoute: '/content',
+  },
 };
 ```
+
 `Record<Role, …>` makes a fourth role a compile error until its policy row exists. Nothing else in the codebase branches on `Role` values. Other consumers of `ROLES` are zod's `z.enum(ROLES)` in `users.schema.ts`, the role `<select>` in the UI, and the seed. "Can manage other users" is derived from the policy (`userScope === 'reports'`), never from `role === 'manager'`: `usersService.managerCandidates()` returns active users whose role has that scope, and `POST /api/users` validates `managerId` against the same set.
 
 ### Decision function
@@ -173,22 +239,31 @@ type Denial = { kind: 'forbidden' | 'conflict'; code: string; message: string };
 type Decision = { ok: true } | { ok: false; denial: Denial };
 
 export function can(actor: Actor, permission: Permission): boolean;
-export function canOnUser(actor: Actor, permission: Permission, target: PublicUser): boolean;
+export function canOnUser(
+  actor: Actor,
+  permission: Permission,
+  target: PublicUser,
+): boolean;
 export function visibleUsers(actor: Actor, all: PublicUser[]): PublicUser[];
 export function authorizeTargetEdit(actor: Actor, target: PublicUser): Decision;
-export function authorizeUserChange(actor: Actor, target: PublicUser, change: UserChange, users: Iterable<PublicUser>): Decision;
+export function authorizeUserChange(
+  actor: Actor,
+  target: PublicUser,
+  change: UserChange,
+  users: Iterable<PublicUser>,
+): Decision;
 ```
 
 Rules encoded there, and only there:
 
-| # | Rule | Implementation |
-|---|---|---|
-| 1 | Only IT creates users, changes role or status | `can(actor, 'users.create' / 'users.changeRole' / 'users.changeStatus')` via policy |
-| 2 | Manager edits fullName/email only for users with `managerId === actor.id` | `canOnUser`: `userScope === 'all'` → true; `'reports'` → `target.managerId === actor.id` and the target's role has `userScope: null`; `null` → false. Not self, not other managers, not unassigned, not an IT/manager account that happens to report to her (decided 2026-11-09). `POST /api/users` refuses `managerId` for roles with a user scope |
-| 4 | Never zero active IT | `authorizeUserChange`, checked after scope and **before** self-change: target is active, its role has `keepOneActive: true`, the change removes them from their role (status → deactivated, or a different role) and no other active user has that role → `conflict`, code `last_active_in_role`. Literal-free: the flag is a policy column (decided 2026-11-09) |
-| 3 | Nobody deactivates or demotes themselves | `authorizeUserChange`, checked **second**: `target.id === actor.id` and change is `status: 'deactivated'` or `role` away from current → `forbidden`, code `self_change` |
-| 5 | Deactivation immediate | Not a policy rule: `require-session.ts` reloads the user per request and rejects `status !== 'active'` (§8) |
-| 6 | Fourth role in one place | `ROLES` + `ROLE_POLICY` row |
+| #   | Rule                                                                      | Implementation                                                                                                                                                                                                                                                                                                                                                   |
+| --- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Only IT creates users, changes role or status                             | `can(actor, 'users.create' / 'users.changeRole' / 'users.changeStatus')` via policy                                                                                                                                                                                                                                                                              |
+| 2   | Manager edits fullName/email only for users with `managerId === actor.id` | `canOnUser`: `userScope === 'all'` → true; `'reports'` → `target.managerId === actor.id` and the target's role has `userScope: null`; `null` → false. Not self, not other managers, not unassigned, not an IT/manager account that happens to report to her (decided 2026-11-09). `POST /api/users` refuses `managerId` for roles with a user scope              |
+| 4   | Never zero active IT                                                      | `authorizeUserChange`, checked after scope and **before** self-change: target is active, its role has `keepOneActive: true`, the change removes them from their role (status → deactivated, or a different role) and no other active user has that role → `conflict`, code `last_active_in_role`. Literal-free: the flag is a policy column (decided 2026-11-09) |
+| 3   | Nobody deactivates or demotes themselves                                  | `authorizeUserChange`, checked **second**: `target.id === actor.id` and change is `status: 'deactivated'` or `role` away from current → `forbidden`, code `self_change`                                                                                                                                                                                          |
+| 5   | Deactivation immediate                                                    | Not a policy rule: `require-session.ts` reloads the user per request and rejects `status !== 'active'` (§8)                                                                                                                                                                                                                                                      |
+| 6   | Fourth role in one place                                                  | `ROLES` + `ROLE_POLICY` row                                                                                                                                                                                                                                                                                                                                      |
 
 Scope for listing (`/manage-users`, `GET /api/users`): `visibleUsers` applies `userScope` ('all' → everyone, 'reports' → `managerId === actor.id`). IT sees itself in the list but rule 3 still blocks self status/role change.
 
@@ -209,7 +284,7 @@ Route handlers and pages contain no other checks.
 - `POST /api/auth/login` `{ email, password }` → finds active user by email, compares plain text, creates a session token (`randomUUID`), sets cookie `session` (httpOnly, sameSite=lax, path=/, secure in production), returns the `Me` payload. Wrong credentials and deactivated accounts both answer 401 `invalid_credentials` (no account enumeration).
 - `POST /api/auth/logout` → deletes session, clears cookie, 204.
 - `GET /api/auth/me` → `{ user: PublicUser, permissions: Permission[], landingRoute: string }`. This is the only way the browser learns what it may do.
-- `requireSession(request)`: read cookie → session → user. Missing session, or user missing, or `status !== 'active'` → delete the session if present and throw `HttpError(401, 'unauthenticated')`. Because the user record is reloaded on every request, deactivation takes effect on the deactivated user's *next request*. No token invalidation list is needed; that is the answer to the README's "how you made rule 5 work" question.
+- `requireSession(request)`: read cookie → session → user. Missing session, or user missing, or `status !== 'active'` → delete the session if present and throw `HttpError(401, 'unauthenticated')`. Because the user record is reloaded on every request, deactivation takes effect on the deactivated user's _next request_. No token invalidation list is needed; that is the answer to the README's "how you made rule 5 work" question.
 - Sessions live in the store (`sessions` map) and reset with it.
 - `proxy.ts` (Next 16 middleware) redirects to `/login` when the `session` cookie is absent, for every path except `/login`, `/api/*` and Next internals. It does not validate the session; a stale cookie reaches the page, `requirePageSession` fails, and the page redirects to `/login` with the cookie cleared via the `/api/auth/logout` route the login page calls on mount when a `?expired=1` flag is present. Builder's call on the exact mechanism; the requirement is: stale cookie → single redirect to `/login`, no loop.
 
@@ -217,19 +292,19 @@ Route handlers and pages contain no other checks.
 
 Envelope: success returns the resource JSON directly; errors return `{ error: { code: string; message: string; details?: unknown } }` with the HTTP status. `http/handle.ts` wraps every route handler: catches `HttpError` → envelope, anything else → 500 `internal` (logged). `parseBody`/`parseQuery` use `safeParse` and throw `HttpError` 400 `validation` themselves; a non-JSON content type is 415.
 
-| Method & path | Permission | Body / query | Response |
-|---|---|---|---|
-| `POST /api/auth/login` | public | `{ email, password }` | 200 `Me` / 401 |
-| `POST /api/auth/logout` | session | — | 204 |
-| `GET /api/auth/me` | session | — | 200 `Me` |
-| `GET /api/users` | `users.list` | — | 200 `{ items: PublicUser[] }` scoped by `visibleUsers` |
-| `GET /api/users/managers` | `users.create` | — | 200 `{ items: PublicUser[] }` active users whose role policy has `userScope: 'reports'`; feeds the manager dropdown |
-| `POST /api/users` | `users.create` | `{ fullName, email, password, role, managerId? }` | 201 `PublicUser` / 400 / 409 `email_taken` |
-| `PATCH /api/users/:id` | `users.editProfile` + `canOnUser` | `{ fullName?, email? }` at least one | 200 / 403 `out_of_scope` / 404 / 409 |
-| `PATCH /api/users/:id/role` | `users.changeRole` + `authorizeUserChange` | `{ role }` | 200 / 403 `self_change` / 409 `last_active_in_role` |
-| `PATCH /api/users/:id/status` | `users.changeStatus` + `authorizeUserChange` | `{ status }` | 200 / 403 `self_change` / 409 `last_active_in_role` |
-| `GET /api/clients` | `content.view` | `?page=1&limit=25` (limit 1–100, default 25) | 200 `{ items, total, page, limit }` |
-| `GET /api/clients/:id` | `content.view` | — | 200 `Client` / 404 |
+| Method & path                 | Permission                                   | Body / query                                      | Response                                                                                                            |
+| ----------------------------- | -------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/auth/login`        | public                                       | `{ email, password }`                             | 200 `Me` / 401                                                                                                      |
+| `POST /api/auth/logout`       | session                                      | —                                                 | 204                                                                                                                 |
+| `GET /api/auth/me`            | session                                      | —                                                 | 200 `Me`                                                                                                            |
+| `GET /api/users`              | `users.list`                                 | —                                                 | 200 `{ items: PublicUser[] }` scoped by `visibleUsers`                                                              |
+| `GET /api/users/managers`     | `users.create`                               | —                                                 | 200 `{ items: PublicUser[] }` active users whose role policy has `userScope: 'reports'`; feeds the manager dropdown |
+| `POST /api/users`             | `users.create`                               | `{ fullName, email, password, role, managerId? }` | 201 `PublicUser` / 400 / 409 `email_taken`                                                                          |
+| `PATCH /api/users/:id`        | `users.editProfile` + `canOnUser`            | `{ fullName?, email? }` at least one              | 200 / 403 `out_of_scope` / 404 / 409                                                                                |
+| `PATCH /api/users/:id/role`   | `users.changeRole` + `authorizeUserChange`   | `{ role }`                                        | 200 / 403 `self_change` / 409 `last_active_in_role`                                                                 |
+| `PATCH /api/users/:id/status` | `users.changeStatus` + `authorizeUserChange` | `{ status }`                                      | 200 / 403 `self_change` / 409 `last_active_in_role`                                                                 |
+| `GET /api/clients`            | `content.view`                               | `?page=1&limit=25` (limit 1–100, default 25)      | 200 `{ items, total, page, limit }`                                                                                 |
+| `GET /api/clients/:id`        | `content.view`                               | —                                                 | 200 `Client` / 404                                                                                                  |
 
 Order of checks inside a mutating handler: session (401) → permission (403) → parse body (400) → load target (404) → scope / invariants (409 then 403, see §7) → service write → 200. `managerId` on create must be null or reference an active user in `managerCandidates()` (400 `invalid_manager`). `password` is required on create (min 4 chars, plain text, never returned). Emails are compared case-insensitively and stored lower-case.
 
@@ -237,15 +312,15 @@ Role / status endpoints are separate from profile edit on purpose: one permissio
 
 ## 10. Pages
 
-| Route | Guard | Rendering |
-|---|---|---|
-| `/` | — | server redirect: no session → `/login`, else → `landingRoute` |
-| `/login` | — | form posts to `/api/auth/login` via `api-client`; on success `router.push(landingRoute)`. If already logged in → redirect to landing |
-| `/content` | `content.view` | server shell + client `ClientsTable` that fetches `/api/clients?page=N`; page in URL `?page=`; Prev / Next / "showing x–y of total" |
-| `/content/client/[id]` | `content.view` | server component reads via `clientsService.getById` (same code path as the API), 404 via `notFound()` |
-| `/content/me` | `content.view` | server component rendering the session user |
-| `/manage-users` | `users.list` | server shell + client `UsersTable`: rows from `GET /api/users`; per-row inline edit of fullName/email (shown when `permissions` include `users.editProfile`), role `<select>` over `ROLES` and status toggle (shown when `users.changeRole` / `users.changeStatus` present); create form (`users.create`) with password field and manager dropdown from `GET /api/users/managers`. Every action calls the API and re-fetches; API errors are shown verbatim from the envelope |
-| Forbidden | — | `Forbidden.tsx` rendered in place by `requirePagePermission` with the text "403 — your role (<role>) cannot access this page" and a link to the landing route. Never a redirect |
+| Route                  | Guard          | Rendering                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                    | —              | server redirect: no session → `/login`, else → `landingRoute`                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `/login`               | —              | form posts to `/api/auth/login` via `api-client`; on success `router.push(landingRoute)`. If already logged in → redirect to landing                                                                                                                                                                                                                                                                                                                                          |
+| `/content`             | `content.view` | server shell + client `ClientsTable` that fetches `/api/clients?page=N`; page in URL `?page=`; Prev / Next / "showing x–y of total"                                                                                                                                                                                                                                                                                                                                           |
+| `/content/client/[id]` | `content.view` | server component reads via `clientsService.getById` (same code path as the API), 404 via `notFound()`                                                                                                                                                                                                                                                                                                                                                                         |
+| `/content/me`          | `content.view` | server component rendering the session user                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `/manage-users`        | `users.list`   | server shell + client `UsersTable`: rows from `GET /api/users`; per-row inline edit of fullName/email (shown when `permissions` include `users.editProfile`), role `<select>` over `ROLES` and status toggle (shown when `users.changeRole` / `users.changeStatus` present); create form (`users.create`) with password field and manager dropdown from `GET /api/users/managers`. Every action calls the API and re-fetches; API errors are shown verbatim from the envelope |
+| Forbidden              | —              | `Forbidden.tsx` rendered in place by `requirePagePermission` with the text "403 — your role (<role>) cannot access this page" and a link to the landing route. Never a redirect                                                                                                                                                                                                                                                                                               |
 
 `Nav.tsx` is a fixed left sidebar (dark theme, one green accent, per the client's visual language; wireframes and design system approved 2026-11-09). It receives `Me` and shows links only for permitted areas, the user's name with a role badge, and a Logout button. Under 720px it becomes a top bar. Hiding links is UX; it is not a check. The stylesheet comes from the design system and replaces `src/app/globals.css`.
 
@@ -255,12 +330,12 @@ Client-side `api-client.ts`: `credentials: 'same-origin'`, parses the envelope, 
 
 Vitest, `environment: node`. Route handlers are imported and called with a `Request`; cookies are passed via the `cookie` header; the store is reset in `beforeEach`. No dev server in tests.
 
-| Layer | File | Coverage |
-|---|---|---|
-| access | `unit/access/authorize.test.ts` | every cell of the role table, `visibleUsers` per role, rules 2–4 including: manager vs self / other manager / unassigned / another manager's report; last-IT via status and via role; self-change |
-| services | `unit/users/*.test.ts`, `unit/clients/*.test.ts` | email uniqueness, manager validation, pagination math (first, middle, last, out-of-range page, limit clamp) |
-| API | `api/*.test.ts` | status codes and envelopes per endpoint, 401 without cookie, 400 on bad body |
-| scenarios | `api/scenarios.test.ts` | the six walkthroughs from the task verbatim, including "Olena's next request fails after deactivation" |
+| Layer     | File                                             | Coverage                                                                                                                                                                                          |
+| --------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| access    | `unit/access/authorize.test.ts`                  | every cell of the role table, `visibleUsers` per role, rules 2–4 including: manager vs self / other manager / unassigned / another manager's report; last-IT via status and via role; self-change |
+| services  | `unit/users/*.test.ts`, `unit/clients/*.test.ts` | email uniqueness, manager validation, pagination math (first, middle, last, out-of-range page, limit clamp)                                                                                       |
+| API       | `api/*.test.ts`                                  | status codes and envelopes per endpoint, 401 without cookie, 400 on bad body                                                                                                                      |
+| scenarios | `api/scenarios.test.ts`                          | the six walkthroughs from the task verbatim, including "Olena's next request fails after deactivation"                                                                                            |
 
 TDD order per module: test file first, then implementation. `npm test` must be green before every commit.
 
@@ -287,14 +362,14 @@ Counter-intuitive facts that go in `AGENTS.md` verbatim: IT cannot view `/conten
 9. `test: six walkthrough scenarios`
 10. `docs: README — run, accounts, auth choice, decision points, next steps`
 11. `ci: lint, typecheck, test, build`
-Then, only if the core passes: sorting/filtering with URL state, audit trail, error/loading states, Docker, each as its own commit.
+    Then, only if the core passes: sorting/filtering with URL state, audit trail, error/loading states, Docker, each as its own commit.
 
 ## 14. Left to the builder
 
 - Exact passwords, names of the four Anna reports beyond those listed, client name pools.
 - Page size default (25 proposed), `limit` ceiling (100).
 - Stale-cookie clearing mechanism (§8), as long as there is no loop.
-- Component file granularity under `src/ui/components`.
+- Component file granularity under `src/ui`: shared pieces in `primitives/` and `layout/`, one folder per feature.
 
 ## 15. Calls made after the builder check
 

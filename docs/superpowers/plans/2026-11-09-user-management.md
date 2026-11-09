@@ -36,11 +36,13 @@
 ### Task 1: Scaffold, tooling, repo hygiene
 
 **Files:**
+
 - Create: everything `create-next-app` emits, then rewrite `next.config.ts`, `eslint.config.mjs`, `tsconfig.json`, `src/app/layout.tsx`, `src/app/page.tsx`, `src/app/globals.css`
 - Create: `.prettierrc`, `vitest.config.ts`, `.gitignore` additions
 - Delete: `public/*.svg`, `src/app/favicon.ico` stays
 
 **Interfaces:**
+
 - Produces: `npm run dev|build|start|lint|format|typecheck|test|test:watch`; path alias `@/*` → `src/*` for both tsc and Vitest.
 
 - [ ] **Step 1: Scaffold into a sibling directory and move it in (the repo folder already holds `docs/`)**
@@ -75,7 +77,11 @@ import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
-  test: { environment: 'node', include: ['test/**/*.test.ts'], clearMocks: true },
+  test: {
+    environment: 'node',
+    include: ['test/**/*.test.ts'],
+    clearMocks: true,
+  },
 });
 ```
 
@@ -114,9 +120,11 @@ git commit -m "chore: scaffold next 16, strict ts, eslint+prettier, vitest"
 ### Task 2: Agent files and architecture docs
 
 **Files:**
+
 - Create: `AGENTS.md`, `CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/CONVENTIONS.md`, `docs/TESTING.md`, `docs/GUARDRAILS.md`
 
 **Interfaces:**
+
 - Produces: the rules later tasks must obey; Task 10 revisits these files for drift.
 
 - [ ] **Step 1: Write `AGENTS.md`** (≈60 lines), sections in this order:
@@ -131,7 +139,7 @@ git commit -m "chore: scaffold next 16, strict ts, eslint+prettier, vitest"
 - [ ] **Step 2: Write `CLAUDE.md`** identical to `AGENTS.md` except the title line `# CLAUDE.md` and a first sentence "Guidance for Claude Code in this repository."
 - [ ] **Step 3: (removed, no GEMINI.md per Viktor 2026-11-09)**
 - [ ] **Step 4: Write `docs/ARCHITECTURE.md`**: layers table (Route handler | Service | Repository | Store, each with Owns / Never does); folder tree from spec §5; access module description (policy, authorize, denial kinds, evaluation order); session model; `globalThis` store and `resetStore()`.
-- [ ] **Step 5: Write `docs/CONVENTIONS.md`**: zod schema is the DTO, `z.enum(ROLES)` / `z.enum(USER_STATUSES)`; error envelope and `HttpError`; `PublicUser` is the only user shape that leaves `src/server`; explicit return types on exported server functions; no comments; file naming `<domain>.service.ts` / `.repository.ts` / `.schema.ts`; client components live in `src/ui/components` and import only `src/ui` and `src/shared`.
+- [ ] **Step 5: Write `docs/CONVENTIONS.md`**: zod schema is the DTO, `z.enum(ROLES)` / `z.enum(USER_STATUSES)`; error envelope and `HttpError`; `PublicUser` is the only user shape that leaves `src/server`; explicit return types on exported server functions; no comments; file naming `<domain>.service.ts` / `.repository.ts` / `.schema.ts`; client components live under `src/ui/` (`primitives/`, `layout/`, one folder per feature) and import only `src/ui` and `src/shared`.
 - [ ] **Step 6: Write `docs/TESTING.md`**: table (access → unit, services → unit with `resetStore()` in `beforeEach`, route handlers → call exported `GET/POST/PATCH` with `new Request(...)` and `{ params: Promise.resolve({ id }) }`, pages → none); `loginAs(email)` helper returns a cookie header; test file first, then implementation; `clearMocks` is on.
 - [ ] **Step 7: Write `docs/GUARDRAILS.md`**: Approval required: new dependency, API shape change, change to `ROLE_POLICY` semantics or denial codes. Never: `any` / `@ts-ignore`; role literal outside allowed files; permission logic in `src/ui` or any `'use client'` file; fetching all clients to the browser; secrets or real passwords beyond the seed; comments in code. When in doubt: additive over destructive; ask before refactoring across `src/server` domains.
 - [ ] **Step 8: Verify** every file is free of framework or database terms that do not apply here: `grep -rniE "nest|drizzle|postgres|migration" AGENTS.md CLAUDE.md docs/*.md` → no output.
@@ -147,33 +155,74 @@ git commit -m "docs: agent files, architecture docs, spec and plan"
 ### Task 3: Shared contracts, in-memory store, seed
 
 **Files:**
+
 - Create: `src/shared/roles.ts`, `src/shared/permissions.ts`, `src/shared/api-types.ts`
 - Create: `src/server/store/store.ts`, `src/server/store/types.ts`, `src/server/store/seed/clients.generator.ts`, `src/server/store/seed/users.seed.ts`
 - Test: `test/unit/store/clients.generator.test.ts`, `test/unit/store/users.seed.test.ts`, `test/unit/store/store.test.ts`
 
 **Interfaces:**
+
 - Produces:
+
 ```ts
 // src/shared/roles.ts
 export const ROLES = ['IT', 'manager', 'user'] as const;
 export type Role = (typeof ROLES)[number];
 // src/shared/permissions.ts
-export const PERMISSIONS = ['users.list', 'users.create', 'users.editProfile', 'users.changeRole', 'users.changeStatus', 'content.view'] as const;
+export const PERMISSIONS = [
+  'users.list',
+  'users.create',
+  'users.editProfile',
+  'users.changeRole',
+  'users.changeStatus',
+  'content.view',
+] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 // src/shared/api-types.ts
 export const USER_STATUSES = ['active', 'deactivated'] as const;
 export type UserStatus = (typeof USER_STATUSES)[number];
-export type PublicUser = { id: string; fullName: string; email: string; role: Role; status: UserStatus; managerId: string | null; createdAt: string };
+export type PublicUser = {
+  id: string;
+  fullName: string;
+  email: string;
+  role: Role;
+  status: UserStatus;
+  managerId: string | null;
+  createdAt: string;
+};
 export const CLIENT_STATUSES = ['active', 'churned'] as const;
 export type ClientStatus = (typeof CLIENT_STATUSES)[number];
-export type Client = { id: string; name: string; company: string; email: string; country: string; status: ClientStatus; createdAt: string };
-export type Me = { user: PublicUser; permissions: Permission[]; landingRoute: string };
-export type Paginated<T> = { items: T[]; total: number; page: number; limit: number };
-export type ErrorEnvelope = { error: { code: string; message: string; details?: unknown } };
+export type Client = {
+  id: string;
+  name: string;
+  company: string;
+  email: string;
+  country: string;
+  status: ClientStatus;
+  createdAt: string;
+};
+export type Me = {
+  user: PublicUser;
+  permissions: Permission[];
+  landingRoute: string;
+};
+export type Paginated<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+};
+export type ErrorEnvelope = {
+  error: { code: string; message: string; details?: unknown };
+};
 // src/server/store/store.ts
 export type User = PublicUser & { password: string };
 export type Session = { token: string; userId: string; createdAt: string };
-export type Store = { users: Map<string, User>; clients: Client[]; sessions: Map<string, Session> };
+export type Store = {
+  users: Map<string, User>;
+  clients: Client[];
+  sessions: Map<string, Session>;
+};
 export function getStore(): Store;
 export function resetStore(): Store;
 // src/server/store/seed/clients.generator.ts
@@ -238,32 +287,61 @@ git commit -m "feat: in-memory store with seeded users and generated clients"
 ### Task 4: Access policy and authorize rules
 
 **Files:**
+
 - Create: `src/server/access/policy.ts`, `src/server/access/authorize.ts`, `src/server/access/user-change.ts`
 - Test: `test/unit/access/policy.test.ts`, `test/unit/access/authorize.test.ts`, `test/unit/access/user-change.test.ts`, `test/helpers/users.ts`
 
 **Interfaces:**
+
 - Consumes: `Role`, `Permission`, `PublicUser`, `UserStatus` from Task 3.
 - Produces:
+
 ```ts
 // src/server/access/policy.ts
 export type UserScope = 'all' | 'reports';
-export type RolePolicy = { permissions: ReadonlySet<Permission>; userScope: UserScope | null; landingRoute: string };
+export type RolePolicy = {
+  permissions: ReadonlySet<Permission>;
+  userScope: UserScope | null;
+  landingRoute: string;
+};
 export const ROLE_POLICY: Record<Role, RolePolicy>;
 export function policyFor(role: Role): RolePolicy;
 export function permissionsOf(role: Role): Permission[];
-export function canManageReports(role: Role): boolean;          // userScope === 'reports'
+export function canManageReports(role: Role): boolean; // userScope === 'reports'
 // src/server/access/authorize.ts
 export function can(actor: PublicUser, permission: Permission): boolean;
-export function canOnUser(actor: PublicUser, permission: Permission, target: PublicUser): boolean;
-export function visibleUsers(actor: PublicUser, all: PublicUser[]): PublicUser[];
+export function canOnUser(
+  actor: PublicUser,
+  permission: Permission,
+  target: PublicUser,
+): boolean;
+export function visibleUsers(
+  actor: PublicUser,
+  all: PublicUser[],
+): PublicUser[];
 // src/server/access/user-change.ts (split from authorize.ts, Viktor 2026-11-09)
-export type Denial = { kind: 'forbidden' | 'conflict'; code: string; message: string };
+export type Denial = {
+  kind: 'forbidden' | 'conflict';
+  code: string;
+  message: string;
+};
 export type Decision = { ok: true } | { ok: false; denial: Denial };
 export type UserChange = { role: Role } | { status: UserStatus };
-export const DENIALS: { outOfScope: Denial; lastActiveInRole: Denial; selfChange: Denial };
-export function authorizeUserChange(actor: PublicUser, target: PublicUser, change: UserChange, users: Iterable<PublicUser>): Decision;
+export const DENIALS: {
+  outOfScope: Denial;
+  lastActiveInRole: Denial;
+  selfChange: Denial;
+};
+export function authorizeUserChange(
+  actor: PublicUser,
+  target: PublicUser,
+  change: UserChange,
+  users: Iterable<PublicUser>,
+): Decision;
 // test/helpers/users.ts
-export function user(overrides: Partial<PublicUser> & { role: Role }): PublicUser;   // fills id, email, status 'active', managerId null
+export function user(
+  overrides: Partial<PublicUser> & { role: Role },
+): PublicUser; // fills id, email, status 'active', managerId null
 ```
 
 - [ ] **Step 1: Write the failing policy test** `test/unit/access/policy.test.ts`: a table test over the spec §7 matrix: for each role × permission assert `policyFor(role).permissions.has(p)` equals the expected boolean (IT: all five `users.*`, no `content.view`; manager: `users.list`, `users.editProfile`, `content.view`; user: `content.view` only). Assert `landingRoute` IT → `/manage-users`, others → `/content`. Assert `canManageReports` true only for `manager`. Assert `ROLES.every((r) => r in ROLE_POLICY)`.
@@ -273,36 +351,40 @@ export function user(overrides: Partial<PublicUser> & { role: Role }): PublicUse
 - [ ] **Step 5: Write the failing authorize test** `test/unit/access/authorize.test.ts` using `user()` helper. Fixtures: `ivan` (IT), `petro` (IT), `anna` (manager), `oksana` (manager), `olena` (user, managerId anna), `dmytro` (user, managerId `u-maksym`), `nazar` (user, managerId null).
 
 ```ts
-describe('can', () => { /* one it per matrix row sample: IT cannot content.view; user cannot users.list; manager can users.editProfile */ });
+describe('can', () => {
+  /* one it per matrix row sample: IT cannot content.view; user cannot users.list; manager can users.editProfile */
+});
 describe('canOnUser editProfile', () => {
   it('IT on anyone → true');
-  it('manager on own report → true');            // anna, olena
+  it('manager on own report → true'); // anna, olena
   it('manager on self → false');
-  it('manager on other manager → false');        // anna, oksana
-  it('manager on another manager\'s report → false');   // anna, dmytro
-  it('manager on unassigned user → false');      // anna, nazar
+  it('manager on other manager → false'); // anna, oksana
+  it("manager on another manager's report → false"); // anna, dmytro
+  it('manager on unassigned user → false'); // anna, nazar
   it('user on their own report-looking target → false'); // user-role actor with a target whose managerId === actor.id → false (Review Focus 4)
   it('false when actor lacks the permission regardless of target'); // user actor, 'users.editProfile'
 });
 describe('visibleUsers', () => {
-  it('IT sees all'); it('manager sees only direct reports'); it('user sees none');
+  it('IT sees all');
+  it('manager sees only direct reports');
+  it('user sees none');
 });
 describe('authorizeUserChange', () => {
-  it('last active IT deactivating self → conflict last_active_in_role');          // users = [ivan, anna]
+  it('last active IT deactivating self → conflict last_active_in_role'); // users = [ivan, anna]
   it('last active IT demoting self to manager → conflict last_active_in_role');
   it('IT deactivating self with another active IT → forbidden self_change'); // users = [ivan, petro]
   it('IT demoting self with another active IT → forbidden self_change');
-  it('IT deactivating the other IT → ok');                                    // users = [ivan, petro]
+  it('IT deactivating the other IT → ok'); // users = [ivan, petro]
   it('IT re-activating a deactivated IT → ok');
   it('IT changing own role to IT (no-op) → ok');
   it('IT deactivating a manager → ok');
   it('IT changing a manager to user → ok');
-  it('order: last_active_in_role wins over self_change when both apply');          // ivan alone, deactivate self → code last_active_in_role
+  it('order: last_active_in_role wins over self_change when both apply'); // ivan alone, deactivate self → code last_active_in_role
 });
 ```
 
 - [ ] **Step 6: Run** → FAIL.
-- [ ] **Step 7: Implement `authorize.ts` (lookups) and `user-change.ts` (invariants)**. Rule 4 without a role literal: the invariant is "never remove the last active holder of a role with `keepOneActive`" (policy column, decided 2026-11-09). Implement `removesLastActiveOfProtectedRole(target, change, users): boolean` = target is active, `policyFor(target.role).keepOneActive`, the change is `status: 'deactivated'` or a `role` different from `target.role`, and no *other* active user has `target.role`. For today's roles this is exactly "last active IT"; a fourth admin-like role is protected automatically. `authorizeUserChange` evaluates this first (→ `conflict`, `last_active_in_role`), then `target.id === actor.id` with a deactivating or role-changing change (→ `forbidden`, `self_change`), else `{ ok: true }`.
+- [ ] **Step 7: Implement `authorize.ts` (lookups) and `user-change.ts` (invariants)**. Rule 4 without a role literal: the invariant is "never remove the last active holder of a role with `keepOneActive`" (policy column, decided 2026-11-09). Implement `removesLastActiveOfProtectedRole(target, change, users): boolean` = target is active, `policyFor(target.role).keepOneActive`, the change is `status: 'deactivated'` or a `role` different from `target.role`, and no _other_ active user has `target.role`. For today's roles this is exactly "last active IT"; a fourth admin-like role is protected automatically. `authorizeUserChange` evaluates this first (→ `conflict`, `last_active_in_role`), then `target.id === actor.id` with a deactivating or role-changing change (→ `forbidden`, `self_change`), else `{ ok: true }`.
 - [ ] **Step 8: Run** → PASS. Then `npm test && npm run lint && npm run typecheck`.
 - [ ] **Step 9: Commit**
 
@@ -316,14 +398,17 @@ git commit -m "feat: access policy and authorize rules"
 ### Task 5: HTTP plumbing and session auth
 
 **Files:**
+
 - Create: `src/server/http/errors.ts`, `src/server/http/respond.ts`, `src/server/http/body.ts`, `src/server/http/handle.ts`
 - Create: `src/server/auth/session-cookie.ts`, `src/server/auth/sessions.ts`, `src/server/auth/credentials.ts`, `src/server/auth/me.ts`, `src/server/auth/require-session.ts`, `src/server/auth/require-permission.ts`
 - Create: `src/app/api/auth/login/route.ts`, `src/app/api/auth/logout/route.ts`, `src/app/api/auth/me/route.ts`
 - Test: `test/unit/http/handle.test.ts`, `test/api/auth.test.ts`, `test/helpers/api.ts`
 
 **Interfaces:**
+
 - Consumes: store, `seedUsers`, `can`, `permissionsOf`, `policyFor`.
 - Produces:
+
 ```ts
 // errors.ts
 export class HttpError extends Error { constructor(readonly status: number, readonly code: string, message: string, readonly details?: unknown); }
@@ -369,11 +454,11 @@ export function ctx<P>(params: P): HandlerContext<P>;
 - [ ] **Step 1: Write the failing handle test** `test/unit/http/handle.test.ts`
 
 ```ts
-it('maps HttpError to its status and envelope')            // forbidden('out_of_scope') → 403 { error: { code: 'out_of_scope' } }
-it('maps unknown errors to 500 internal')
-it('parseBody rejects invalid JSON with 400 invalid_json')  // body 'not json'
-it('parseBody rejects schema violations with 400 validation and details')
-it('parseBody rejects a non-object body with 400 validation')  // body '"str"'
+it('maps HttpError to its status and envelope'); // forbidden('out_of_scope') → 403 { error: { code: 'out_of_scope' } }
+it('maps unknown errors to 500 internal');
+it('parseBody rejects invalid JSON with 400 invalid_json'); // body 'not json'
+it('parseBody rejects schema violations with 400 validation and details');
+it('parseBody rejects a non-object body with 400 validation'); // body '"str"'
 ```
 
 - [ ] **Step 2: Run** → FAIL.
@@ -383,18 +468,20 @@ it('parseBody rejects a non-object body with 400 validation')  // body '"str"'
 
 ```ts
 describe('POST /api/auth/login', () => {
-  it('200 with Me and Set-Cookie for valid credentials')          // ivan@example.com / ivan123; body.user.email, body.permissions contains 'users.create', landingRoute '/manage-users'; Set-Cookie matches /^session=[^;]+; Path=\/; HttpOnly; SameSite=Lax$/
-  it('is case-insensitive on email')                                // IVAN@Example.com
-  it('401 invalid_credentials for wrong password')
-  it('401 invalid_credentials for deactivated user')                // yurii@example.com / yurii123
-  it('400 validation for missing fields')
+  it('200 with Me and Set-Cookie for valid credentials'); // ivan@example.com / ivan123; body.user.email, body.permissions contains 'users.create', landingRoute '/manage-users'; Set-Cookie matches /^session=[^;]+; Path=\/; HttpOnly; SameSite=Lax$/
+  it('is case-insensitive on email'); // IVAN@Example.com
+  it('401 invalid_credentials for wrong password');
+  it('401 invalid_credentials for deactivated user'); // yurii@example.com / yurii123
+  it('400 validation for missing fields');
 });
 describe('GET /api/auth/me', () => {
-  it('401 without cookie'); it('401 with unknown token'); it('200 Me with valid cookie')
-  it('401 once the user is deactivated, and the session is gone')  // mutate getStore().users.get('u-olena').status, then me → 401; findSession(token) undefined
+  it('401 without cookie');
+  it('401 with unknown token');
+  it('200 Me with valid cookie');
+  it('401 once the user is deactivated, and the session is gone'); // mutate getStore().users.get('u-olena').status, then me → 401; findSession(token) undefined
 });
 describe('POST /api/auth/logout', () => {
-  it('204 and clears the cookie; me afterwards is 401')
+  it('204 and clears the cookie; me afterwards is 401');
 });
 ```
 
@@ -407,6 +494,7 @@ describe('POST /api/auth/logout', () => {
 curl -si -X POST localhost:3000/api/auth/login -H 'content-type: application/json' -d '{"email":"anna@example.com","password":"anna123"}' | tee /dev/stderr | grep -i '^set-cookie'
 curl -si localhost:3000/api/auth/me   # expect 401 envelope
 ```
+
 Paste both outputs in the report. Stop the dev server.
 
 - [ ] **Step 10: Commit**
@@ -421,13 +509,16 @@ git commit -m "feat: session auth - login, logout, me"
 ### Task 6: Users API
 
 **Files:**
+
 - Create: `src/server/users/users.schema.ts`, `src/server/users/users.repository.ts`, `src/server/users/users.service.ts`
 - Create: `src/app/api/users/route.ts`, `src/app/api/users/managers/route.ts`, `src/app/api/users/[id]/route.ts`, `src/app/api/users/[id]/role/route.ts`, `src/app/api/users/[id]/status/route.ts`
 - Test: `test/unit/users/users.service.test.ts`, `test/api/users.test.ts`
 
 **Interfaces:**
+
 - Consumes: Tasks 3–5.
 - Produces:
+
 ```ts
 // users.schema.ts
 export const createUserSchema = z.object({ fullName: z.string().trim().min(1).max(120), email: z.string().trim().toLowerCase().email(), password: z.string().min(4).max(72), role: z.enum(ROLES), managerId: z.string().min(1).nullable().optional() });
@@ -456,21 +547,23 @@ export function changeStatus(actor: PublicUser, id: string, status: UserStatus):
 ```ts
 describe('createUser', () => {
   it('creates an active user with managerId null when omitted');
-  it('409 email_taken for an existing email in different case');       // 'ANNA@example.com'
-  it('400 invalid_manager when managerId is not a manager candidate');  // 'u-olena', 'u-maksym' (deactivated manager), 'nope'
-  it('accepts an active manager as managerId');                         // 'u-oksana'
+  it('409 email_taken for an existing email in different case'); // 'ANNA@example.com'
+  it('400 invalid_manager when managerId is not a manager candidate'); // 'u-olena', 'u-maksym' (deactivated manager), 'nope'
+  it('accepts an active manager as managerId'); // 'u-oksana'
 });
-describe('managerCandidates', () => { it('returns Anna and Oksana only'); });
+describe('managerCandidates', () => {
+  it('returns Anna and Oksana only');
+});
 describe('updateProfile', () => {
-  it('404 for unknown id before any scope check');                      // anna, 'missing' → 404 not 403 (Review Focus 2)
-  it('403 out_of_scope for a manager editing a non-report');            // anna → dmytro
-  it('updates own report');                                             // anna → olena fullName
-  it('409 email_taken when changing to another user\'s email');
-  it('allows setting the same email the user already has');             // Review Focus 3
+  it('404 for unknown id before any scope check'); // anna, 'missing' → 404 not 403 (Review Focus 2)
+  it('403 out_of_scope for a manager editing a non-report'); // anna → dmytro
+  it('updates own report'); // anna → olena fullName
+  it("409 email_taken when changing to another user's email");
+  it('allows setting the same email the user already has'); // Review Focus 3
 });
 describe('changeStatus / changeRole', () => {
   it('deactivating a user succeeds and the result has status deactivated');
-  it('propagates last_active_in_role as 409');                               // deactivate petro, then ivan deactivates ivan
+  it('propagates last_active_in_role as 409'); // deactivate petro, then ivan deactivates ivan
   it('propagates self_change as 403');
 });
 ```
@@ -483,15 +576,21 @@ describe('changeStatus / changeRole', () => {
 ```ts
 it('GET /api/users 401 without cookie');
 it('GET /api/users as Anna lists exactly her four reports');
-it('GET /api/users as Ivan lists all users and never includes password');   // JSON.stringify(body) does not contain 'ivan123'
+it('GET /api/users as Ivan lists all users and never includes password'); // JSON.stringify(body) does not contain 'ivan123'
 it('GET /api/users as Olena → 403');
 it('GET /api/users/managers as Ivan → Anna and Oksana; as Anna → 403');
-it('POST /api/users as Anna → 403; as Ivan with valid body → 201; with bad email → 400 validation');
+it(
+  'POST /api/users as Anna → 403; as Ivan with valid body → 201; with bad email → 400 validation',
+);
 it('PATCH /api/users/u-dmytro as Anna → 403 out_of_scope');
 it('PATCH /api/users/u-olena as Anna → 200 with new fullName');
-it('PATCH /api/users/u-anna/role as Anna → 403 forbidden');              // rule 1, not self_change: permission check comes first
-it('PATCH /api/users/u-ivan/status as Ivan → 403 self_change; after deactivating u-petro → 409 last_active_in_role');
-it('PATCH /api/users/u-olena/status {status:"deactivated"} as Ivan → 200, then Olena\'s /api/auth/me → 401');
+it('PATCH /api/users/u-anna/role as Anna → 403 forbidden'); // rule 1, not self_change: permission check comes first
+it(
+  'PATCH /api/users/u-ivan/status as Ivan → 403 self_change; after deactivating u-petro → 409 last_active_in_role',
+);
+it(
+  'PATCH /api/users/u-olena/status {status:"deactivated"} as Ivan → 200, then Olena\'s /api/auth/me → 401',
+);
 ```
 
 - [ ] **Step 6: Run** → FAIL.
@@ -509,30 +608,35 @@ git commit -m "feat: users api with scoped edit, role and status endpoints"
 ### Task 7: Paginated clients API
 
 **Files:**
+
 - Create: `src/server/clients/clients.schema.ts`, `src/server/clients/clients.repository.ts`, `src/server/clients/clients.service.ts`
 - Create: `src/app/api/clients/route.ts`, `src/app/api/clients/[id]/route.ts`
 - Test: `test/unit/clients/clients.service.test.ts`, `test/api/clients.test.ts`
 
 **Interfaces:**
+
 ```ts
 // clients.schema.ts
-export const listClientsQuerySchema = z.object({ page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(25) });
+export const listClientsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
 export type ListClientsQuery = z.infer<typeof listClientsQuerySchema>;
 // clients.repository.ts
-export function pageClients(page: number, limit: number): Paginated<Client>;   // slice over the pre-sorted array
+export function pageClients(page: number, limit: number): Paginated<Client>; // slice over the pre-sorted array
 export function findClient(id: string): Client | undefined;
 // clients.service.ts
 export function listClients(query: ListClientsQuery): Paginated<Client>;
-export function getClient(id: string): Client;                                 // notFound('client')
+export function getClient(id: string): Client; // notFound('client')
 ```
 
 - [ ] **Step 1: Write the failing service test**
 
 ```ts
 it('first page returns 25 items and total 1200');
-it('page 48 returns the last 25; page 49 returns [] with total 1200');     // Review Focus 5
+it('page 48 returns the last 25; page 49 returns [] with total 1200'); // Review Focus 5
 it('limit 100 page 12 returns 100 items; page 13 returns []');
-it('items are in the store\'s order (createdAt desc)');
+it("items are in the store's order (createdAt desc)");
 it('getClient throws 404 for unknown id');
 ```
 
@@ -541,10 +645,16 @@ it('getClient throws 404 for unknown id');
 
 ```ts
 it('GET /api/clients 401 without cookie');
-it('GET /api/clients as Ivan → 403');                                  // IT cannot view content
-it('GET /api/clients as Anna → 200, items.length 25, total 1200, page 1, limit 25');
-it('GET /api/clients?page=2&limit=10 → page 2 limit 10, items differ from page 1');
-it('GET /api/clients?page=0 → 400 validation; ?page=abc → 400; ?limit=101 → 400');
+it('GET /api/clients as Ivan → 403'); // IT cannot view content
+it(
+  'GET /api/clients as Anna → 200, items.length 25, total 1200, page 1, limit 25',
+);
+it(
+  'GET /api/clients?page=2&limit=10 → page 2 limit 10, items differ from page 1',
+);
+it(
+  'GET /api/clients?page=0 → 400 validation; ?page=abc → 400; ?limit=101 → 400',
+);
 it('GET /api/clients?page=999 → 200 items [] total 1200');
 it('GET /api/clients/c-0001 as Olena → 200; /api/clients/nope → 404');
 ```
@@ -562,11 +672,13 @@ git commit -m "feat: paginated clients api"
 ### Task 8: App shell — proxy, page auth, login, root redirect, forbidden
 
 **Files:**
-- Create: `src/proxy.ts`, `src/server/page-auth.ts`, `src/ui/api-client.ts`, `src/ui/components/Nav.tsx`, `src/ui/components/Forbidden.tsx`, `src/ui/components/ErrorMessage.tsx`, `src/ui/components/LoginForm.tsx`
+
+- Create: `src/proxy.ts`, `src/server/page-auth.ts`, `src/ui/api-client.ts`, `src/ui/layout/Nav.tsx`, `src/ui/layout/SidebarUser.tsx`, `src/ui/layout/Forbidden.tsx`, `src/ui/primitives/ErrorMessage.tsx`, `src/ui/auth/LoginForm.tsx`
 - Modify: `src/app/layout.tsx`, `src/app/page.tsx`
 - Create: `src/app/login/page.tsx`
 
 **Interfaces:**
+
 ```ts
 // src/server/page-auth.ts (server only; uses cookies() from next/headers)
 export async function currentUser(): Promise<PublicUser | null>;             // null when no/invalid/inactive session
@@ -597,6 +709,7 @@ C=$(curl -si -X POST localhost:3000/api/auth/login -H 'content-type: application
 curl -si -H "cookie: $C" localhost:3000/ | head -3             # 307 Location: /manage-users
 curl -si -H "cookie: session=stale" localhost:3000/ | head -3  # 307 Location: /login
 ```
+
 Paste outputs. Stop the dev server.
 
 - [ ] **Step 8: Commit**
@@ -611,9 +724,11 @@ git commit -m "feat: app shell - proxy, page auth, login, forbidden"
 ### Task 9: Content pages
 
 **Files:**
-- Create: `src/app/content/page.tsx`, `src/app/content/client/[id]/page.tsx`, `src/app/content/me/page.tsx`, `src/ui/components/ClientsTable.tsx`, `src/ui/components/Pagination.tsx`
+
+- Create: `src/app/content/page.tsx`, `src/app/content/client/[id]/page.tsx`, `src/app/content/me/page.tsx`, `src/ui/clients/ClientsTable.tsx`, `src/ui/clients/ClientRow.tsx`, `src/ui/hooks/useApiQuery.ts`, `src/ui/format.ts`, `src/ui/primitives/{Badge,DetailsList,PageHeader,Pagination,TableSkeleton}.tsx`
 
 **Interfaces:**
+
 ```ts
 ClientsTable({ initialPage }: { initialPage: number })   // 'use client'; reads ?page via useSearchParams, fetches apiFetch<Paginated<Client>>(`/api/clients?page=${page}&limit=25`); rows link to /content/client/<id>; renders Pagination
 Pagination({ page, limit, total, onChange }: { page: number; limit: number; total: number; onChange: (page: number) => void })   // "Showing a–b of total", Prev/Next disabled at bounds; onChange pushes ?page= via router
@@ -632,12 +747,13 @@ curl -s -H "cookie: $ANNA" localhost:3000/api/clients?page=2 | python3 -c 'impor
 curl -s -H "cookie: $ANNA" localhost:3000/content/client/c-0001 | grep -c 'c-0001'   # ≥1
 curl -si -H "cookie: $ANNA" localhost:3000/content/client/nope | head -1              # 404
 ```
+
 Paste outputs. Stop the dev server.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/app/content src/ui/components/ClientsTable.tsx src/ui/components/Pagination.tsx
+git add src/app/content src/ui docs AGENTS.md
 git commit -m "feat: content pages - clients table, client detail, me"
 ```
 
@@ -646,9 +762,11 @@ git commit -m "feat: content pages - clients table, client detail, me"
 ### Task 10: Manage users page
 
 **Files:**
-- Create: `src/app/manage-users/page.tsx`, `src/ui/components/UsersTable.tsx`, `src/ui/components/UserRow.tsx`, `src/ui/components/CreateUserForm.tsx`
+
+- Create: `src/app/manage-users/page.tsx`, `src/ui/users/UsersTable.tsx`, `src/ui/users/UserRow.tsx`, `src/ui/users/CreateUserForm.tsx`
 
 **Interfaces:**
+
 ```ts
 UsersTable({ me }: { me: Me })            // 'use client'; loads GET /api/users; renders UserRow per user; shows CreateUserForm when me.permissions includes 'users.create'; refetches after any change
 UserRow({ user, me, onChanged }: { user: PublicUser; me: Me; onChanged: () => void })
@@ -667,12 +785,13 @@ curl -s -H "cookie: $OLENA" localhost:3000/manage-users | grep -o '403[^<]*'    
 curl -s -H "cookie: $ANNA" localhost:3000/api/users | python3 -c 'import json,sys; print([u["fullName"] for u in json.load(sys.stdin)["items"]])'   # four names
 curl -si -X PATCH -H "cookie: $ANNA" -H 'content-type: application/json' -d '{"role":"IT"}' localhost:3000/api/users/u-anna/role | head -1   # 403
 ```
+
 Paste outputs. Stop the dev server.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/app/manage-users src/ui/components/UsersTable.tsx src/ui/components/UserRow.tsx src/ui/components/CreateUserForm.tsx
+git add src/app/manage-users src/ui/users
 git commit -m "feat: manage users page with scoped editing"
 ```
 
@@ -681,17 +800,20 @@ git commit -m "feat: manage users page with scoped editing"
 ### Task 11: Walkthrough scenarios test
 
 **Files:**
+
 - Test: `test/api/scenarios.test.ts`
 
 - [ ] **Step 1: Write the six scenarios from the task, one `it` each, API level, using `loginAs` and the route modules**
 
 ```ts
-it('1. Anna sees only her four reports; cannot edit Dmytro via API')            // GET users → 4 ids; PATCH u-dmytro → 403 out_of_scope
-it('2. Anna cannot give herself IT')                                             // PATCH u-anna/role → 403 forbidden
-it('3. Anna pages clients and opens one; each page is ≤ 25 items')               // page 1, page 2 differ; GET client by first id → 200
-it('4. Ivan lands on /manage-users and is refused on content')                   // login landingRoute '/manage-users'; GET clients → 403
-it('5. Ivan: self deactivate 403 self_change; deactivate Petro 200; self again 409 last_active_in_role')
-it('6. Olena browsing, Ivan deactivates her, her next request is 401')           // GET clients 200; PATCH status by Ivan; GET clients with Olena cookie → 401
+it('1. Anna sees only her four reports; cannot edit Dmytro via API'); // GET users → 4 ids; PATCH u-dmytro → 403 out_of_scope
+it('2. Anna cannot give herself IT'); // PATCH u-anna/role → 403 forbidden
+it('3. Anna pages clients and opens one; each page is ≤ 25 items'); // page 1, page 2 differ; GET client by first id → 200
+it('4. Ivan lands on /manage-users and is refused on content'); // login landingRoute '/manage-users'; GET clients → 403
+it(
+  '5. Ivan: self deactivate 403 self_change; deactivate Petro 200; self again 409 last_active_in_role',
+);
+it('6. Olena browsing, Ivan deactivates her, her next request is 401'); // GET clients 200; PATCH status by Ivan; GET clients with Olena cookie → 401
 ```
 
 - [ ] **Step 2: Run** `npx vitest run test/api/scenarios.test.ts` → PASS on first run (everything exists). If any fails, that is a real defect: fix the owning module, not the test.
@@ -707,6 +829,7 @@ git commit -m "test: six walkthrough scenarios"
 ### Task 12: README
 
 **Files:**
+
 - Create: `README.md`
 - Modify: `AGENTS.md`, `CLAUDE.md`, `docs/*.md` only if a file path or rule drifted during Tasks 3–11
 
@@ -724,6 +847,7 @@ git commit -m "docs: README - run, accounts, auth choice, decision points, next 
 ### Task 13: CI
 
 **Files:**
+
 - Create: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: Write the workflow**: on `push` and `pull_request`; `concurrency` group per ref with cancel-in-progress; one job `check` on `ubuntu-latest`, `actions/checkout@v4`, `actions/setup-node@v4` with `node-version: 24` and `cache: npm`; steps `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.

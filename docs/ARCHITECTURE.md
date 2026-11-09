@@ -2,12 +2,12 @@
 
 ## Layer rules
 
-| Layer | Owns | Never does |
-|-------|------|------------|
-| **Route handler** (`src/app/api/**`) | HTTP mapping: `requirePermission`, then parse, then service, then respond | Business decisions, store access |
-| **Service** (`src/server/<domain>/*.service.ts`) | Business logic, calls into `access/`, maps denials with `fromDenial`, throws `HttpError` | Store internals, `Request`/`Response` objects, role comparisons |
-| **Repository** (`src/server/<domain>/*.repository.ts`) | Reads and writes against the store, strips `password` | Business decisions |
-| **Store** (`src/server/store/`) | The in-memory data and the seed | Logic |
+| Layer                                                  | Owns                                                                                     | Never does                                                      |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **Route handler** (`src/app/api/**`)                   | HTTP mapping: `requirePermission`, then parse, then service, then respond                | Business decisions, store access                                |
+| **Service** (`src/server/<domain>/*.service.ts`)       | Business logic, calls into `access/`, maps denials with `fromDenial`, throws `HttpError` | Store internals, `Request`/`Response` objects, role comparisons |
+| **Repository** (`src/server/<domain>/*.repository.ts`) | Reads and writes against the store, strips `password`                                    | Business decisions                                              |
+| **Store** (`src/server/store/`)                        | The in-memory data and the seed                                                          | Logic                                                           |
 
 ## Folders
 
@@ -24,7 +24,8 @@ src/
     clients/    clients.schema.ts, clients.repository.ts, clients.service.ts
     http/       errors.ts, respond.ts, handle.ts
     page-auth.ts                  session and permission checks for server components
-  ui/           api-client.ts, components/
+    page-load.ts                  loadOrNotFound: service 404 → notFound() for pages
+  ui/           api-client.ts, format.ts, hooks/, primitives/, layout/, auth/, clients/, users/
 test/
   unit/         store, access, http, users, clients
   api/          auth, users, clients, scenarios

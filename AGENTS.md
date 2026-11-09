@@ -23,7 +23,7 @@ npm run typecheck                  # tsc --noEmit
 - `src/server/` everything that runs on the server: `store/`, `access/`, `auth/`, `users/`, `clients/`, `http/`. Imports only `src/server` and `src/shared`.
 - `src/app/api/**` route handlers. Import `src/server` only. No logic beyond authorize → parse → service → respond, so 401/403 always come before 400.
 - `src/app/**/page.tsx` server components. May import `src/server` for reads and auth.
-- `src/ui/` client-safe code: `api-client.ts`, `components/`. Imports `src/shared` only, never `src/server`.
+- `src/ui/` client-safe code. `api-client.ts`, `format.ts`, `hooks/`, `primitives/` (Badge, DetailsList, PageHeader, Pagination, TableSkeleton, ErrorMessage), `layout/` (Nav, SidebarUser, Forbidden) and one folder per feature (`auth/`, `clients/`, `users/`). One component per file, named exports, no barrel files. Imports `src/shared` only, never `src/server`.
 - `'use client'` files import only `src/ui` and `src/shared`.
 - `test/` mirrors `src/server`: `unit/`, `api/`, `helpers/`.
 

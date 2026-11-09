@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import type { Me } from '@/shared/api-types';
 
-export function Forbidden({ me }: { me: Me }) {
+type ForbiddenProps = { me: Me };
+
+export function Forbidden({ me }: ForbiddenProps) {
   return (
     <section className="card">
       <h1 className="page-title">

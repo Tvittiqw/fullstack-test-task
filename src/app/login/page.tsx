@@ -1,13 +1,11 @@
 import { redirect } from 'next/navigation';
 import { policyFor } from '@/server/access/policy';
 import { currentUser } from '@/server/page-auth';
-import { LoginForm } from '@/ui/components/LoginForm';
+import { LoginForm } from '@/ui/auth/LoginForm';
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ expired?: string }>;
-}) {
+type LoginPageProps = { searchParams: Promise<{ expired?: string }> };
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const user = await currentUser();
   if (user) redirect(policyFor(user.role).landingRoute);
   const { expired } = await searchParams;
